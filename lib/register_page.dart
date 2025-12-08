@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -14,11 +16,15 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _dateController = TextEditingController();
+  final _specializationController = TextEditingController();
+  final _licenseController = TextEditingController();
+
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
   bool _agreeToTerms = false;
   String? _selectedGender;
+  String _selectedRole = 'patient';
   DateTime? _selectedDate;
 
   @override
@@ -28,6 +34,8 @@ class _RegisterPageState extends State<RegisterPage> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _dateController.dispose();
+    _specializationController.dispose();
+    _licenseController.dispose();
     super.dispose();
   }
 
@@ -60,29 +68,159 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_formKey.currentState!.validate()) {
       if (!_agreeToTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please agree to the terms and conditions'),
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Please agree to the terms and conditions'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
         return;
       }
 
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
 
-      // Simulate registration API call
-      await Future.delayed(const Duration(seconds: 2));
+      try {
+        print('Creating user account...');
 
-      setState(() {
-        _isLoading = false;
-      });
+        // Create user with email and password
+        UserCredential userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+            );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registration successful!')),
+        print('✓ User created in Auth: ${userCredential.user!.uid}');
+
+        // Prepare user data
+        Map<String, dynamic> userData = {
+          'name': _nameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'gender': _selectedGender,
+          'birthdate': _selectedDate != null
+              ? Timestamp.fromDate(_selectedDate!)
+              : null,
+          'age': _selectedDate != null ? _calculateAge(_selectedDate!) : null,
+          'role': _selectedRole,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+
+        // Add role-specific fields
+        if (_selectedRole == 'doctor') {
+          userData['specialization'] = _specializationController.text.trim();
+          userData['licenseNumber'] = _licenseController.text.trim();
+          userData['isVerified'] = false;
+          userData['totalPatients'] = 0;
+          userData['rating'] = 5.0;
+        }
+
+        // Save to Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set(userData);
+
+        print('✓ User document created in Firestore');
+
+        // Update display name
+        await userCredential.user!.updateDisplayName(
+          _nameController.text.trim(),
         );
-        Navigator.pop(context);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _selectedRole == 'doctor'
+                          ? 'Registration successful! Please wait for admin verification.'
+                          : 'Registration successful! You can now log in.',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green.shade800,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+
+          // Sign out the user so they go back to login
+          await FirebaseAuth.instance.signOut();
+          Navigator.pop(context);
+        }
+      } on FirebaseAuthException catch (e) {
+        setState(() => _isLoading = false);
+
+        String errorMessage = 'Error occurred during registration';
+
+        switch (e.code) {
+          case 'email-already-in-use':
+            errorMessage = 'This email is already registered';
+            break;
+          case 'weak-password':
+            errorMessage = 'Password is too weak. Use at least 6 characters';
+            break;
+          case 'invalid-email':
+            errorMessage = 'Invalid email address';
+            break;
+          case 'operation-not-allowed':
+            errorMessage = 'Email/password accounts are not enabled';
+            break;
+          default:
+            errorMessage = e.message ?? errorMessage;
+        }
+
+        print('✗ Registration error: ${e.code} - $errorMessage');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(errorMessage)),
+                ],
+              ),
+              backgroundColor: Colors.red.shade800,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        print('✗ Unexpected error: $e');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red.shade800,
+            ),
+          );
+        }
       }
     }
   }
@@ -108,8 +246,6 @@ class _RegisterPageState extends State<RegisterPage> {
             child: Column(
               children: [
                 const SizedBox(height: 10),
-
-                // TOP ICON AND TEXT
                 Column(
                   children: const [
                     Icon(
@@ -132,10 +268,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 30),
-
-                // FORM CONTAINER (card)
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -153,6 +286,49 @@ class _RegisterPageState extends State<RegisterPage> {
                     key: _formKey,
                     child: Column(
                       children: [
+                        // Role Selection
+                        DropdownButtonFormField<String>(
+                          value: _selectedRole,
+                          decoration: inputDecoration(
+                            "Register as",
+                            Icons.badge_outlined,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'patient',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.person,
+                                    size: 20,
+                                    color: Colors.blue,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Patient'),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'doctor',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.medical_services,
+                                    size: 20,
+                                    color: Colors.green,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Doctor'),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _selectedRole = value!),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Name
                         buildInput(
                           label: "Full Name",
                           icon: Icons.person_outline,
@@ -160,9 +336,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           validator: (value) =>
                               value!.isEmpty ? "Enter your full name" : null,
                         ),
-
                         const SizedBox(height: 16),
 
+                        // Gender
                         DropdownButtonFormField<String>(
                           value: _selectedGender,
                           decoration: inputDecoration("Gender", Icons.person),
@@ -172,16 +348,14 @@ class _RegisterPageState extends State<RegisterPage> {
                                     DropdownMenuItem(value: e, child: Text(e)),
                               )
                               .toList(),
-                          onChanged: (value) => setState(() {
-                            _selectedGender = value;
-                          }),
+                          onChanged: (value) =>
+                              setState(() => _selectedGender = value),
                           validator: (value) =>
                               value == null ? "Select your gender" : null,
                         ),
-
                         const SizedBox(height: 16),
 
-                        // DATE OF BIRTH
+                        // Date of Birth
                         TextFormField(
                           controller: _dateController,
                           readOnly: true,
@@ -195,7 +369,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           validator: (value) =>
                               value!.isEmpty ? "Select your birth date" : null,
                         ),
-
                         if (_selectedDate != null) ...[
                           const SizedBox(height: 8),
                           Text(
@@ -206,9 +379,59 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                         ],
-
                         const SizedBox(height: 16),
 
+                        // Doctor-specific fields
+                        if (_selectedRole == 'doctor') ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Doctor accounts require admin verification before activation',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          buildInput(
+                            label: "Specialization",
+                            icon: Icons.medical_services_outlined,
+                            controller: _specializationController,
+                            validator: (value) => value!.isEmpty
+                                ? "Enter your specialization"
+                                : null,
+                          ),
+                          const SizedBox(height: 16),
+                          buildInput(
+                            label: "License Number",
+                            icon: Icons.card_membership_outlined,
+                            controller: _licenseController,
+                            validator: (value) => value!.isEmpty
+                                ? "Enter your license number"
+                                : null,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Email
                         buildInput(
                           label: "Email",
                           icon: Icons.email_outlined,
@@ -220,41 +443,44 @@ class _RegisterPageState extends State<RegisterPage> {
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 16),
 
+                        // Password
                         buildPasswordInput(
                           label: "Password",
                           controller: _passwordController,
                           isVisible: _isPasswordVisible,
-                          onToggle: () => setState(() {
-                            _isPasswordVisible = !_isPasswordVisible;
-                          }),
+                          onToggle: () => setState(
+                            () => _isPasswordVisible = !_isPasswordVisible,
+                          ),
+                          validator: (value) {
+                            if (value!.isEmpty) return "Enter a password";
+                            if (value.length < 6)
+                              return "Password must be at least 6 characters";
+                            return null;
+                          },
                         ),
-
                         const SizedBox(height: 16),
 
+                        // Confirm Password
                         buildPasswordInput(
                           label: "Confirm Password",
                           controller: _confirmPasswordController,
                           isVisible: _isConfirmPasswordVisible,
-                          onToggle: () => setState(() {
-                            _isConfirmPasswordVisible =
-                                !_isConfirmPasswordVisible;
-                          }),
+                          onToggle: () => setState(
+                            () => _isConfirmPasswordVisible =
+                                !_isConfirmPasswordVisible,
+                          ),
                           validator: (value) {
-                            if (value!.isEmpty) {
-                              return "Confirm your password";
-                            }
-                            if (value != _passwordController.text) {
+                            if (value!.isEmpty) return "Confirm your password";
+                            if (value != _passwordController.text)
                               return "Passwords do not match";
-                            }
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 12),
 
+                        // Terms Checkbox
                         Row(
                           children: [
                             Checkbox(
@@ -275,10 +501,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
 
-                        // REGISTER BUTTON
+                        // Register Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -291,9 +516,13 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                             ),
                             child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
                                 : const Text(
                                     "Create Account",
@@ -304,9 +533,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                   ),
                           ),
                         ),
-
                         const SizedBox(height: 12),
 
+                        // Login Redirect
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -335,7 +564,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  // REUSABLE INPUTS
   InputDecoration inputDecoration(
     String label,
     IconData icon, {

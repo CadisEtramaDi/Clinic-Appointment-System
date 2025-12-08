@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import '../services/appointment_service.dart';
 import 'book_appointment_page.dart';
 import 'appointment_history_page.dart';
 import 'profile_page.dart';
@@ -8,573 +11,148 @@ class PatientPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appointmentService = AppointmentService();
+    final user = appointmentService.currentUser;
+
+    if (user == null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Please log in to continue'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  // Navigate to login page
+                },
+                child: const Text('Login'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Enhanced Header with gradient
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.blue.shade50, const Color(0xFFE3F2FD)],
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: appointmentService.getUserDataStream(),
+          builder: (context, userSnapshot) {
+            final userName = userSnapshot.hasData && userSnapshot.data!.exists
+                ? (userSnapshot.data!.data() as Map<String, dynamic>)['name'] ??
+                      'User'
+                : 'User';
+
+            return Column(
+              children: [
+                _buildHeader(context, userName),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.shade100,
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                        _buildUpcomingSection(context, appointmentService),
+                        const SizedBox(height: 32),
+                        _buildQuickActions(context),
+                        const SizedBox(height: 32),
+                        _buildHealthStats(context, appointmentService),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildBottomNav(context),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, String userName) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.blue.shade50, const Color(0xFFE3F2FD)],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.shade100,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.menu_rounded,
+                      color: Colors.blue.shade800,
+                      size: 26,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blue.shade100,
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                          child: IconButton(
+                        ],
+                      ),
+                      child: Stack(
+                        children: [
+                          IconButton(
                             icon: Icon(
-                              Icons.menu_rounded,
+                              Icons.notifications_outlined,
                               color: Colors.blue.shade800,
                               size: 26,
                             ),
                             onPressed: () {},
                           ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.shade100,
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Stack(
-                                children: [
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.notifications_outlined,
-                                      color: Colors.blue.shade800,
-                                      size: 26,
-                                    ),
-                                    onPressed: () {},
-                                  ),
-                                  Positioned(
-                                    right: 8,
-                                    top: 8,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Container(
-                              decoration: BoxDecoration(
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
                                 shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.blue.shade200,
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.shade100,
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: Colors.blue.shade100,
-                                child: Icon(
-                                  Icons.person,
-                                  color: Colors.blue.shade800,
-                                  size: 26,
-                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Welcome back,\n',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w300,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'John!',
-                                style: TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade900,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
-                              size: 16,
-                              color: Colors.blue.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Today: November 28, 2025',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Upcoming Appointment Card with enhanced design
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Upcoming Appointment',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '1 upcoming',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue.shade800,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Colors.white, Colors.blue.shade50],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.shade100,
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  Icons.calendar_month,
-                                  color: Colors.blue.shade800,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'General Check-up',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.blue.shade900,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildAppointmentDetail(
-                                      Icons.person_outline,
-                                      'Dr. Emily White',
-                                      Colors.blue.shade700,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    _buildAppointmentDetail(
-                                      Icons.access_time,
-                                      'Dec 5, 2025 - 10:00 AM',
-                                      Colors.blue.shade600,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    _buildAppointmentDetail(
-                                      Icons.location_on,
-                                      'Main Clinic - Room 205',
-                                      Colors.blue.shade600,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: const Text(
-                                          'Viewing appointment details...',
-                                        ),
-                                        backgroundColor: Colors.blue.shade800,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue.shade800,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.visibility_outlined,
-                                        size: 20,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'View Details',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    _showCancelDialog(context);
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-                                    side: BorderSide(
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.cancel_outlined, size: 20),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Cancel',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 32),
-
-                    // Enhanced Action Buttons
-                    Text(
-                      'Quick Actions',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade900,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 1.2,
-                      children: [
-                        _buildActionCard(
-                          context,
-                          icon: Icons.calendar_month,
-                          label: 'Book Appointment',
-                          color: Colors.blue.shade800,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const BookAppointmentPage(),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildActionCard(
-                          context,
-                          icon: Icons.history,
-                          label: 'View History',
-                          color: Colors.green.shade800,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const AppointmentHistoryPage(),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildActionCard(
-                          context,
-                          icon: Icons.local_hospital,
-                          label: 'Find Doctors',
-                          color: Colors.purple.shade800,
-                          onTap: () {},
-                        ),
-                        _buildActionCard(
-                          context,
-                          icon: Icons.medication,
-                          label: 'Prescriptions',
-                          color: Colors.orange.shade800,
-                          onTap: () {},
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Enhanced Quick Stats
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.shade200,
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.insights,
-                                color: Colors.blue.shade800,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Health Statistics',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade900,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          _buildEnhancedStatRow(
-                            icon: Icons.description_outlined,
-                            label: 'Total Appointments',
-                            value: '125',
-                            progress: 1.0,
-                            color: Colors.blue,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildEnhancedStatRow(
-                            icon: Icons.check_circle_outline,
-                            label: 'Completed',
-                            value: '100',
-                            progress: 0.8,
-                            color: Colors.green,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildEnhancedStatRow(
-                            icon: Icons.access_time,
-                            label: 'Upcoming',
-                            value: '25',
-                            progress: 0.2,
-                            color: Colors.orange,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            ),
-
-            // Enhanced Bottom Navigation
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.shade300,
-                    blurRadius: 20,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 16,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildEnhancedNavItem(
-                      context,
-                      Icons.home_rounded,
-                      'Home',
-                      true,
-                      () {},
-                    ),
-                    _buildEnhancedNavItem(
-                      context,
-                      Icons.calendar_month,
-                      'Book',
-                      false,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BookAppointmentPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildEnhancedNavItem(
-                      context,
-                      Icons.history,
-                      'History',
-                      false,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const AppointmentHistoryPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildEnhancedNavItem(
-                      context,
-                      Icons.person,
-                      'Profile',
-                      false,
-                      () {
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -582,8 +160,225 @@ class PatientPage extends StatelessWidget {
                           ),
                         );
                       },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.blue.shade200,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.shade100,
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: Colors.blue.shade100,
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.blue.shade800,
+                            size: 26,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'Welcome back,\n',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w300,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '$userName!',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 16,
+                      color: Colors.blue.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Today: ${DateFormat('MMMM dd, yyyy').format(DateTime.now())}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUpcomingSection(
+    BuildContext context,
+    AppointmentService appointmentService,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Upcoming Appointments',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade900,
+              ),
+            ),
+            StreamBuilder<int>(
+              stream: appointmentService.getUpcomingAppointmentsCount(),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$count upcoming',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        StreamBuilder<QuerySnapshot>(
+          stream: appointmentService.getAppointmentsStream(
+            filterStatus: 'Upcoming',
+          ),
+          builder: (context, snapshot) {
+            // Filter in UI for upcoming
+            var appointments = snapshot.hasData
+                ? snapshot.data!.docs.where((doc) {
+                    final status = doc['status'];
+                    return status == 'pending' || status == 'upcoming';
+                  }).toList()
+                : [];
+
+            if (appointments.isEmpty) {
+              return _buildEmptyUpcoming(context);
+            }
+
+            final appointment =
+                appointments.first.data() as Map<String, dynamic>;
+            final appointmentId = appointments.first.id;
+            final appointmentDate =
+                (appointment['appointmentDate'] as Timestamp).toDate();
+            final timeSlot = appointment['timeSlot'] ?? 'No time specified';
+            final reason = appointment['reason'] ?? 'Consultation';
+
+            return _buildUpcomingCard(
+              context,
+              appointmentId,
+              reason,
+              appointmentDate,
+              timeSlot,
+              appointmentService,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyUpcoming(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Colors.blue.shade50],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.shade100,
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(Icons.calendar_today, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'No upcoming appointments',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookAppointmentPage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('Book Appointment'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade800,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
@@ -593,12 +388,233 @@ class PatientPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAppointmentDetail(IconData icon, String text, Color color) {
-    return Row(
+  Widget _buildUpcomingCard(
+    BuildContext context,
+    String appointmentId,
+    String reason,
+    DateTime appointmentDate,
+    String timeSlot,
+    AppointmentService appointmentService,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Colors.blue.shade50],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.shade100,
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.calendar_month,
+                  color: Colors.blue.shade800,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reason,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 16,
+                          color: Colors.blue.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${DateFormat('MMM dd, yyyy').format(appointmentDate)} - $timeSlot',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AppointmentHistoryPage(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade800,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.visibility_outlined, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'View Details',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _showCancelDialog(
+                    context,
+                    appointmentId,
+                    appointmentService,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.cancel_outlined,
+                        size: 20,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
-        Text(text, style: TextStyle(fontSize: 14, color: color)),
+        Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue.shade900,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 1.2,
+          children: [
+            _buildActionCard(
+              context,
+              icon: Icons.calendar_month,
+              label: 'Book Appointment',
+              color: Colors.blue.shade800,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookAppointmentPage(),
+                  ),
+                );
+              },
+            ),
+            _buildActionCard(
+              context,
+              icon: Icons.history,
+              label: 'View History',
+              color: Colors.green.shade800,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AppointmentHistoryPage(),
+                  ),
+                );
+              },
+            ),
+            _buildActionCard(
+              context,
+              icon: Icons.local_hospital,
+              label: 'Find Doctors',
+              color: Colors.purple.shade800,
+              onTap: () {},
+            ),
+            _buildActionCard(
+              context,
+              icon: Icons.medication,
+              label: 'Prescriptions',
+              color: Colors.orange.shade800,
+              onTap: () {},
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -649,6 +665,81 @@ class PatientPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHealthStats(
+    BuildContext context,
+    AppointmentService appointmentService,
+  ) {
+    return StreamBuilder<Map<String, int>>(
+      stream: appointmentService.getAppointmentStats(),
+      builder: (context, snapshot) {
+        final stats =
+            snapshot.data ?? {'total': 0, 'completed': 0, 'upcoming': 0};
+
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.shade200,
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.insights, color: Colors.blue.shade800, size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Health Statistics',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildEnhancedStatRow(
+                icon: Icons.description_outlined,
+                label: 'Total Appointments',
+                value: '${stats['total']}',
+                progress: 1.0,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 20),
+              _buildEnhancedStatRow(
+                icon: Icons.check_circle_outline,
+                label: 'Completed',
+                value: '${stats['completed']}',
+                progress: stats['total']! > 0
+                    ? stats['completed']! / stats['total']!
+                    : 0,
+                color: Colors.green,
+              ),
+              const SizedBox(height: 20),
+              _buildEnhancedStatRow(
+                icon: Icons.access_time,
+                label: 'Upcoming',
+                value: '${stats['upcoming']}',
+                progress: stats['total']! > 0
+                    ? stats['upcoming']! / stats['total']!
+                    : 0,
+                color: Colors.orange,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -708,6 +799,68 @@ class PatientPage extends StatelessWidget {
     );
   }
 
+  Widget _buildBottomNav(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade300,
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildEnhancedNavItem(
+              context,
+              Icons.home_rounded,
+              'Home',
+              true,
+              () {},
+            ),
+            _buildEnhancedNavItem(
+              context,
+              Icons.calendar_month,
+              'Book',
+              false,
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookAppointmentPage(),
+                  ),
+                );
+              },
+            ),
+            _buildEnhancedNavItem(context, Icons.history, 'History', false, () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AppointmentHistoryPage(),
+                ),
+              );
+            }),
+            _buildEnhancedNavItem(context, Icons.person, 'Profile', false, () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfilePage()),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEnhancedNavItem(
     BuildContext context,
     IconData icon,
@@ -747,10 +900,14 @@ class PatientPage extends StatelessWidget {
     );
   }
 
-  void _showCancelDialog(BuildContext context) {
+  static void _showCancelDialog(
+    BuildContext context,
+    String appointmentId,
+    AppointmentService appointmentService,
+  ) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
@@ -783,7 +940,7 @@ class PatientPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Are you sure you want to cancel your appointment with Dr. Emily White?',
+                  'Are you sure you want to cancel this appointment?',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
                 ),
@@ -792,7 +949,7 @@ class PatientPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -813,23 +970,30 @@ class PatientPage extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                'Appointment cancelled successfully',
+                        onPressed: () async {
+                          Navigator.of(dialogContext).pop();
+
+                          final result = await appointmentService
+                              .cancelAppointment(appointmentId);
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(result['message']),
+                                backgroundColor: result['success']
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
-                              backgroundColor: Colors.green.shade800,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          );
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade800,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),

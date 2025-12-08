@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../login_page.dart';
 
 class DoctorProfilePage extends StatefulWidget {
@@ -9,6 +11,9 @@ class DoctorProfilePage extends StatefulWidget {
 }
 
 class _DoctorProfilePageState extends State<DoctorProfilePage> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   final Color _primaryColor = const Color(0xFF2D5AEE);
   final Color _secondaryColor = const Color(0xFF6C7BFF);
   final Color _backgroundColor = const Color(0xFFF8FAFC);
@@ -17,8 +22,94 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
   final Color _textSecondary = const Color(0xFF64748B);
   final Color _successColor = const Color(0xFF10B981);
 
+  bool _isLoading = true;
+  Map<String, dynamic>? _userData;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (userDoc.exists) {
+        setState(() {
+          _userData = userDoc.data() as Map<String, dynamic>?;
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      DateTime dateTime;
+      if (date is Timestamp) {
+        dateTime = date.toDate();
+      } else if (date is DateTime) {
+        dateTime = date;
+      } else {
+        return 'N/A';
+      }
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  int _calculateYearsOfExperience() {
+    // Calculate based on createdAt field (when doctor registered)
+    if (_userData?['createdAt'] == null) return 0;
+
+    try {
+      DateTime createdDate;
+      if (_userData?['createdAt'] is Timestamp) {
+        createdDate = (_userData?['createdAt'] as Timestamp).toDate();
+      } else {
+        return 0;
+      }
+
+      DateTime now = DateTime.now();
+      int years = now.year - createdDate.year;
+      if (now.month < createdDate.month ||
+          (now.month == createdDate.month && now.day < createdDate.day)) {
+        years--;
+      }
+      return years;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: _backgroundColor,
+        body: Center(child: CircularProgressIndicator(color: _primaryColor)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _backgroundColor,
       body: CustomScrollView(
@@ -50,7 +141,12 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   child: const Icon(Icons.edit, color: Colors.white),
                 ),
                 onPressed: () {
-                  // Edit profile action
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Edit profile coming soon'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
                 },
               ),
             ],
@@ -84,7 +180,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                           ],
                         ),
                         child: Icon(
-                          Icons.person,
+                          Icons.medical_services,
                           size: 50,
                           color: _primaryColor,
                         ),
@@ -94,7 +190,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Text(
-                            'Dr. Johnson',
+                            'Dr. ${_userData?['name'] ?? 'Doctor'}',
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -111,7 +207,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Text(
-                            'General Physician',
+                            _userData?['specialization'] ?? 'General Physician',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.white.withOpacity(0.9),
@@ -122,6 +218,39 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                           ),
                         ),
                       ),
+                      // Verification Badge
+                      if (_userData?['isVerified'] == true) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _successColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.verified,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Verified',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                     ],
                   ),
@@ -146,7 +275,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         Expanded(
                           child: _buildStatCard(
                             icon: Icons.people,
-                            value: '1,234',
+                            value: '${_userData?['totalPatients'] ?? '0'}',
                             label: 'Patients',
                             color: _successColor,
                             isSmallScreen: isSmallScreen,
@@ -156,7 +285,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         Expanded(
                           child: _buildStatCard(
                             icon: Icons.star,
-                            value: '4.9',
+                            value: '${_userData?['rating'] ?? '5.0'}',
                             label: 'Rating',
                             color: Colors.orange,
                             isSmallScreen: isSmallScreen,
@@ -166,7 +295,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         Expanded(
                           child: _buildStatCard(
                             icon: Icons.work,
-                            value: '12',
+                            value: '${_calculateYearsOfExperience()}',
                             label: 'Years Exp.',
                             color: _primaryColor,
                             isSmallScreen: isSmallScreen,
@@ -215,25 +344,31 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                       _buildInfoRow(
                         icon: Icons.email_outlined,
                         label: 'Email',
-                        value: 'dr.johnson@clinic.com',
+                        value: _userData?['email'] ?? 'N/A',
                       ),
                       const SizedBox(height: 16),
                       _buildInfoRow(
                         icon: Icons.phone_outlined,
                         label: 'Phone',
-                        value: '+1 (555) 123-4567',
+                        value: _userData?['phone'] ?? 'Not provided',
                       ),
                       const SizedBox(height: 16),
                       _buildInfoRow(
-                        icon: Icons.location_on_outlined,
-                        label: 'Address',
-                        value: '123 Medical Center Dr, Suite 400',
+                        icon: Icons.cake_outlined,
+                        label: 'Date of Birth',
+                        value: _formatDate(_userData?['birthdate']),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildInfoRow(
+                        icon: Icons.person_outline,
+                        label: 'Gender',
+                        value: _userData?['gender'] ?? 'N/A',
                       ),
                       const SizedBox(height: 16),
                       _buildInfoRow(
                         icon: Icons.badge_outlined,
                         label: 'License No.',
-                        value: 'MD-123456',
+                        value: _userData?['licenseNumber'] ?? 'N/A',
                       ),
                     ],
                   ),
@@ -246,7 +381,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Specializations',
+                  'Specialization',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -263,10 +398,9 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    _buildSpecializationChip('General Medicine'),
-                    _buildSpecializationChip('Internal Medicine'),
-                    _buildSpecializationChip('Preventive Care'),
-                    _buildSpecializationChip('Family Medicine'),
+                    _buildSpecializationChip(
+                      _userData?['specialization'] ?? 'General Medicine',
+                    ),
                   ],
                 ),
               ),
@@ -326,10 +460,10 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                       ),
                       Divider(height: 1, color: Colors.grey[200]),
                       _buildSettingsTile(
-                        icon: Icons.language,
-                        title: 'Language',
-                        subtitle: 'English (US)',
-                        onTap: () {},
+                        icon: Icons.refresh,
+                        title: 'Refresh Profile',
+                        subtitle: 'Reload your information',
+                        onTap: _loadUserData,
                       ),
                     ],
                   ),
@@ -369,7 +503,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                     ],
                   ),
                   child: Text(
-                    'Dr. Johnson is a highly experienced General Physician with over 12 years of practice. Specializing in internal medicine and preventive care, Dr. Johnson is committed to providing comprehensive healthcare services to patients of all ages.',
+                    _userData?['bio'] ??
+                        'Experienced medical professional committed to providing quality healthcare services to all patients.',
                     style: TextStyle(
                       fontSize: 14,
                       color: _textSecondary,
@@ -614,28 +749,14 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context); // Close dialog
-
-                // Navigate to login page and remove all previous routes
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                  (Route<dynamic> route) => false,
-                );
-
-                // Show success message after a brief delay
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Logged out successfully'),
-                        backgroundColor: Colors.red,
-                        behavior: SnackBarBehavior.floating,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                });
+              onPressed: () async {
+                await _auth.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (Route<dynamic> route) => false,
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

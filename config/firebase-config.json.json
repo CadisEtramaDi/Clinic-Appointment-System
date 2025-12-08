@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "clinic-appointment-403a3",
+  "private_key_id": "0b93f59d1fe1a7b0a873459849d9855a83bf9929",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDTDw630P9mimZ2\nSP5TDppSze9ls6xbRI9mWD8TeAaPCUiNaxFcQ9McK6xIAHELr9saPbJiziEioH18\nqwKi6OgxEFhSQTu1PL0aBRT+KhtPEk2x27Iptj/D9Cl6VGNPbZdiExHEjPlLBWL6\nheC/G+LP1QIdf5QBaTf1H4XGd+Mld+iIxp8zJ6+9A+sfrlygnVJxnd1CXo1OyvhK\nJIhSVm4xXwana+7ahApLnVm/tOme06YuqybdUkww1d2Z3id2jI/UQOVrDBQmbJQm\nrpqo808PkBz09LGLIMaCAsIU0sYgm8HZj0XUrJL7LpN8ym5ZfN4EjLZQ6vJJccTc\nSBigAlhvAgMBAAECggEASZRMxcF7YISsbt1IqK0FGQwJQzPtyQ2wTnZCWyezZadP\nX1ntvfQ5Q29oStu4jWH76PyMVYzWGWvJA67cpu26kOxJVje+uJLZvBn8dRU52wmf\nA3v7czZBqa9TzH1h991VctACGDsrZ7+Tf5IvxYBTxK/WYnFJKGrFotOgAA5opnUy\njdsYjwZM475fDId7Yn6XIH7bL9JHqBXjtJuK6vCv1kRCJiZ0Ojaxq+wOYLl9RKST\nNqBb/ArEtmVc1ESHvFeLVQF+RK7WqHx0fSdTkHHbO0iom0Jjh67fGN6nQhtEX1bu\nMGOnZvQoy8QNQpP6C64oXsUGx4al6pjFduDHOeogNQKBgQDolFl7g7CqQ2w9b6Fs\nWMVlj/DebBvlBPRPGZZeVUqXHEJRW3iNzh6/fq9nYNZ0fklvGUK+b619Jeg/6wrT\nugCEtw25L4CY25wFdMqZnjq8/Ujte/t71jck/hNUI0WxFfnNKQBCAS94V9uisvuo\nsrvcRyj7bDXYsTE5dGmOnCVAfQKBgQDoT+2UhAJMDwQMHG2L9Znd2AXolRalPJUz\nGmO8rlIXOAZmiLlXCP2FWXkyHHLnR4XdHl1+R1OOCWAgMEIreUgsp6RQps53GohA\n6oKcMkCMlzkvtXIIYI2nXfzXEDq3a1N3ZRRrtxQS4Soh9uMkEPYVQO8pP4c0wJNp\n/deDOQ3cWwKBgQCMEKtDAy/lme0ZopyoT12xqFn62UiDR9SJvnMcJGljT5VwwZF8\ndOF3maewrlT4mwVGbwQPA9qLP8T6mWZP0/hz9HnDSKQ9aiQv9QH+OZhOMIs22i+9\niGh1Ur35MbTKzN0/fK23ElewNdkDxp5gHiOcqQ45PBXBhhSK8VyQkeCtUQKBgGln\nMm1LA9vMiFKSZ2W0Nm7AP9YKJu8rsKoyFASctyRPyB+ncyg5LQXe1a1V2RB0lBkC\nWPsdk5yDRnj0TGF7MrMIEPaC6HSDtkR14nLKHh1r04eA9M82N68zZq+RboKgEIvA\nceZ5d4MlZD9qzB4mD/EOuDRn3Ymiwn+5q5mfPlm3AoGBALH73JnW2ff6myvO5Mw7\nz1G11rqIfXdxFgd8ktH4dsxJmFgNNCFwVhpEX8OmsWN3H2sQNJu0ygryPp+FgaeC\nFI3EaKzbCFD1jKv6HhoZiGsYwqvu7gw2ykEzKs8LMLbzsZqh21NzxBRdy+B7Sldr\nE4+G7q5HdFjxckKTiIOgwe+Y\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@clinic-appointment-403a3.iam.gserviceaccount.com",
+  "client_id": "102248619917907121843",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40clinic-appointment-403a3.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

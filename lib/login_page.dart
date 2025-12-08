@@ -1,7 +1,9 @@
-import 'package:clinic/patient/patient_page.dart';
-import 'package:clinic/doctor/doctor_dashboard_page.dart';
 import 'package:clinic/admin/admin_dashboard_page.dart';
+import 'package:clinic/doctor/doctor_dashboard_page.dart';
+import 'package:clinic/patient/patient_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -50,6 +52,7 @@ class _LoginPageState extends State<LoginPage>
       ),
     );
     _animationController.forward();
+    _checkCurrentUser();
   }
 
   @override
@@ -60,13 +63,49 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  String _getUserRole(String email) {
-    if (email.contains('admin')) {
-      return 'admin';
-    } else if (email.contains('doctor') || email.contains('dr.')) {
-      return 'doctor';
-    } else {
-      return 'patient';
+  // Check if user is already logged in
+  void _checkCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Get user role from Firestore
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists && mounted) {
+        final role = userDoc.data()?['role'] ?? 'patient';
+        _navigateBasedOnRole(role);
+      }
+    }
+  }
+
+  // Fetch user role from Firestore
+  Future<String> _getUserRole(String userId) async {
+    try {
+      print('Fetching role for user: $userId');
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (userDoc.exists) {
+        final role = userDoc.data()?['role'] ?? 'patient';
+        print('User role from Firestore: $role');
+        return role;
+      } else {
+        print('User document not found, creating default patient profile');
+        // Create default user document if it doesn't exist
+        await FirebaseFirestore.instance.collection('users').doc(userId).set({
+          'email': FirebaseAuth.instance.currentUser?.email,
+          'role': 'patient',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        return 'patient';
+      }
+    } catch (e) {
+      print('Error fetching user role: $e');
+      return 'patient'; // Default to patient on error
     }
   }
 
@@ -101,46 +140,195 @@ class _LoginPageState extends State<LoginPage>
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
 
-      await Future.delayed(const Duration(seconds: 2));
+      try {
+        print('Attempting login with: ${_emailController.text}');
 
-      final userRole = _getUserRole(_emailController.text);
+        // Authenticate with Firebase
+        UserCredential userCredential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+            );
 
-      setState(() {
-        _isLoading = false;
-      });
+        print('✓ Authentication successful: ${userCredential.user!.uid}');
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Welcome back, ${userRole.toUpperCase()}!',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+        // Fetch user role from Firestore
+        final userRole = await _getUserRole(userCredential.user!.uid);
+
+        setState(() => _isLoading = false);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Welcome back, ${userRole.toUpperCase()}!',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 2),
             ),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+          );
 
-        _navigateBasedOnRole(userRole);
+          _navigateBasedOnRole(userRole);
+        }
+      } on FirebaseAuthException catch (e) {
+        setState(() => _isLoading = false);
+
+        String errorMessage = 'An error occurred. Please try again.';
+
+        switch (e.code) {
+          case 'user-not-found':
+            errorMessage = 'No account found with this email';
+            break;
+          case 'wrong-password':
+            errorMessage = 'Incorrect password';
+            break;
+          case 'invalid-email':
+            errorMessage = 'Invalid email address';
+            break;
+          case 'user-disabled':
+            errorMessage = 'This account has been disabled';
+            break;
+          case 'too-many-requests':
+            errorMessage = 'Too many failed attempts. Try again later';
+            break;
+          default:
+            errorMessage = e.message ?? errorMessage;
+        }
+
+        print('✗ Login error: ${e.code} - $errorMessage');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFFEF4444),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        print('✗ Unexpected error: $e');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unexpected error: ${e.toString()}'),
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+          );
+        }
       }
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your email to receive a password reset link'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Email',
+                prefixIcon: const Icon(Icons.email),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter your email')),
+                );
+                return;
+              }
+
+              try {
+                await FirebaseAuth.instance.sendPasswordResetEmail(
+                  email: email,
+                );
+                Navigator.pop(context);
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Password reset email sent!'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                }
+              } catch (e) {
+                Navigator.pop(context);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: const Color(0xFFEF4444),
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+            ),
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -150,16 +338,12 @@ class _LoginPageState extends State<LoginPage>
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0EA5E9),
-              const Color(0xFF3B82F6),
-              const Color(0xFF6366F1),
-            ],
-            stops: const [0.0, 0.5, 1.0],
+            colors: [Color(0xFF0EA5E9), Color(0xFF3B82F6), Color(0xFF6366F1)],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
@@ -189,7 +373,7 @@ class _LoginPageState extends State<LoginPage>
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Logo with enhanced design
+                              // Logo
                               Stack(
                                 alignment: Alignment.center,
                                 children: [
@@ -197,12 +381,12 @@ class _LoginPageState extends State<LoginPage>
                                     width: 120,
                                     height: 120,
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
+                                      gradient: const LinearGradient(
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                         colors: [
-                                          const Color(0xFF0EA5E9),
-                                          const Color(0xFF3B82F6),
+                                          Color(0xFF0EA5E9),
+                                          Color(0xFF3B82F6),
                                         ],
                                       ),
                                       shape: BoxShape.circle,
@@ -255,6 +439,7 @@ class _LoginPageState extends State<LoginPage>
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 40),
+
                               // Email Field
                               _buildTextField(
                                 controller: _emailController,
@@ -273,6 +458,7 @@ class _LoginPageState extends State<LoginPage>
                                 },
                               ),
                               const SizedBox(height: 20),
+
                               // Password Field
                               _buildTextField(
                                 controller: _passwordController,
@@ -291,36 +477,12 @@ class _LoginPageState extends State<LoginPage>
                                 },
                               ),
                               const SizedBox(height: 16),
+
                               // Forgot Password
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: const [
-                                            Icon(
-                                              Icons.mail_outline,
-                                              color: Colors.white,
-                                              size: 20,
-                                            ),
-                                            SizedBox(width: 12),
-                                            Text(
-                                              'Reset link sent to your email!',
-                                            ),
-                                          ],
-                                        ),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        margin: const EdgeInsets.all(16),
-                                      ),
-                                    );
-                                  },
+                                  onPressed: _showForgotPasswordDialog,
                                   style: TextButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
@@ -338,6 +500,7 @@ class _LoginPageState extends State<LoginPage>
                                 ),
                               ),
                               const SizedBox(height: 28),
+
                               // Login Button
                               Container(
                                 height: 58,
@@ -392,6 +555,7 @@ class _LoginPageState extends State<LoginPage>
                                 ),
                               ),
                               const SizedBox(height: 28),
+
                               // Register Link
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -441,6 +605,7 @@ class _LoginPageState extends State<LoginPage>
                                 ],
                               ),
                               const SizedBox(height: 32),
+
                               // Test Accounts Info
                               Container(
                                 padding: const EdgeInsets.all(20),
@@ -455,8 +620,8 @@ class _LoginPageState extends State<LoginPage>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: const [
+                                    const Row(
+                                      children: [
                                         Icon(
                                           Icons.info_rounded,
                                           size: 18,
@@ -558,9 +723,7 @@ class _LoginPageState extends State<LoginPage>
                   size: 22,
                 ),
                 onPressed: () {
-                  setState(() {
-                    _isPasswordVisible = !_isPasswordVisible;
-                  });
+                  setState(() => _isPasswordVisible = !_isPasswordVisible);
                 },
               )
             : null,

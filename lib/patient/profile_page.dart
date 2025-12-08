@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'book_appointment_page.dart';
 import 'appointment_history_page.dart';
 import '../login_page.dart';
-import 'patient_page.dart'; // Import PatientPage for home navigation
+import 'patient_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -13,23 +15,34 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
-  final _nameController = TextEditingController(text: 'John Doe');
-  final _emailController = TextEditingController(text: 'john.doe@email.com');
-  final _phoneController = TextEditingController(text: '+1 234 567 8900');
-  final _addressController = TextEditingController(
-    text: '123 Main St, City, State 12345',
-  );
-  final _emergencyContactController = TextEditingController(
-    text: 'Jane Doe - +1 234 567 8901',
-  );
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Add animation controller and fade animation
+  // Controllers for editable fields
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  late TextEditingController _addressController;
+  late TextEditingController _emergencyContactController;
+
+  // Animation controller and fade animation
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  bool _isLoading = true;
+  Map<String, dynamic>? _userData;
 
   @override
   void initState() {
     super.initState();
+
+    // Initialize controllers with empty values
+    _nameController = TextEditingController();
+    _emailController = TextEditingController();
+    _phoneController = TextEditingController();
+    _addressController = TextEditingController();
+    _emergencyContactController = TextEditingController();
+
     // Initialize animation controller and fade animation
     _animationController = AnimationController(
       vsync: this,
@@ -38,10 +51,64 @@ class _ProfilePageState extends State<ProfilePage>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    // Start animation after a short delay
-    Future.delayed(const Duration(milliseconds: 300), () {
-      _animationController.forward();
-    });
+
+    // Load user data
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (userDoc.exists) {
+        _userData = userDoc.data() as Map<String, dynamic>?;
+
+        // Update controllers with fetched data
+        _nameController.text = _userData?['name'] ?? '';
+        _emailController.text = _userData?['email'] ?? '';
+        _phoneController.text = _userData?['phone'] ?? '';
+        _addressController.text = _userData?['address'] ?? '';
+        _emergencyContactController.text = _userData?['emergencyContact'] ?? '';
+
+        setState(() => _isLoading = false);
+
+        // Start animation after data is loaded
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _animationController.forward();
+        });
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      DateTime dateTime;
+      if (date is Timestamp) {
+        dateTime = date.toDate();
+      } else if (date is DateTime) {
+        dateTime = date;
+      } else {
+        return 'N/A';
+      }
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } catch (e) {
+      return 'N/A';
+    }
   }
 
   @override
@@ -55,15 +122,40 @@ class _ProfilePageState extends State<ProfilePage>
     super.dispose();
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Profile updated successfully!'),
-        backgroundColor: Color(0xFF2196F3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  void _saveProfile() async {
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) return;
+
+      await _firestore.collection('users').doc(currentUser.uid).update({
+        'name': _nameController.text,
+        'phone': _phoneController.text,
+        'address': _addressController.text,
+        'emergencyContact': _emergencyContactController.text,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile updated successfully!'),
+          backgroundColor: Color(0xFF2196F3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+
+      // Reload data to reflect changes
+      _loadUserData();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating profile: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showLogoutDialog() {
@@ -133,8 +225,8 @@ class _ProfilePageState extends State<ProfilePage>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
+                        onPressed: () async {
+                          await _auth.signOut();
                           Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
                               builder: (context) => const LoginPage(),
@@ -171,6 +263,13 @@ class _ProfilePageState extends State<ProfilePage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Color(0xFFF5F9FF),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Color(0xFFF5F9FF),
       body: FadeTransition(
@@ -314,6 +413,7 @@ class _ProfilePageState extends State<ProfilePage>
                         icon: Icons.email_outlined,
                         keyboardType: TextInputType.emailAddress,
                         color: Color(0xFF00BCD4),
+                        enabled: false, // Email shouldn't be editable
                       ),
                       const SizedBox(height: 16),
                       _buildEnhancedTextField(
@@ -342,36 +442,36 @@ class _ProfilePageState extends State<ProfilePage>
                   ),
                   const SizedBox(height: 24),
 
-                  // Medical Information Section
+                  // Medical Information Section (from Firestore)
                   _buildSection(
                     title: 'Medical Information',
                     children: [
                       _buildEnhancedInfoCard(
-                        icon: Icons.bloodtype,
-                        label: 'Blood Type',
-                        value: 'O+',
-                        color: Color(0xFFF44336),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildEnhancedInfoCard(
-                        icon: Icons.healing,
-                        label: 'Allergies',
-                        value: 'Penicillin, Peanuts',
+                        icon: Icons.cake,
+                        label: 'Date of Birth',
+                        value: _formatDate(_userData?['birthdate']),
                         color: Color(0xFFFF9800),
                       ),
                       const SizedBox(height: 12),
                       _buildEnhancedInfoCard(
-                        icon: Icons.medical_information_outlined,
-                        label: 'Chronic Conditions',
-                        value: 'None',
+                        icon: Icons.calendar_today,
+                        label: 'Age',
+                        value: '${_userData?['age'] ?? 'N/A'} years old',
                         color: Color(0xFF4CAF50),
                       ),
                       const SizedBox(height: 12),
                       _buildEnhancedInfoCard(
-                        icon: Icons.fitness_center,
-                        label: 'Primary Doctor',
-                        value: 'Dr. Sarah Johnson',
-                        color: Color(0xFF2196F3),
+                        icon: Icons.person,
+                        label: 'Gender',
+                        value: _userData?['gender'] ?? 'N/A',
+                        color: Color(0xFF9C27B0),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildEnhancedInfoCard(
+                        icon: Icons.bloodtype,
+                        label: 'Blood Type',
+                        value: _userData?['bloodType'] ?? 'Not specified',
+                        color: Color(0xFFF44336),
                       ),
                     ],
                   ),
@@ -552,6 +652,7 @@ class _ProfilePageState extends State<ProfilePage>
     required Color color,
     TextInputType? keyboardType,
     int maxLines = 1,
+    bool enabled = true,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -568,6 +669,7 @@ class _ProfilePageState extends State<ProfilePage>
         controller: controller,
         keyboardType: keyboardType,
         maxLines: maxLines,
+        enabled: enabled,
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(color: color),
@@ -584,7 +686,7 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: enabled ? Colors.white : Colors.grey.shade100,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
@@ -596,6 +698,10 @@ class _ProfilePageState extends State<ProfilePage>
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide(color: color, width: 2),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
           ),
         ),
         style: TextStyle(color: Colors.grey.shade800),
@@ -658,7 +764,6 @@ class _ProfilePageState extends State<ProfilePage>
               ],
             ),
           ),
-          Icon(Icons.edit_outlined, color: Colors.grey.shade400, size: 20),
         ],
       ),
     );

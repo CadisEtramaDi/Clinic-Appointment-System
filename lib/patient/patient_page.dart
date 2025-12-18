@@ -5,9 +5,14 @@ import '../services/appointment_service.dart';
 import 'book_appointment_page.dart';
 import 'appointment_history_page.dart';
 import 'profile_page.dart';
+import 'medical_history_page.dart';
+import 'prescriptions_page.dart';
+import 'lab_results_page.dart';
+import 'export_records_page.dart';
+import 'patient_transactions_page.dart';
 
 class PatientPage extends StatelessWidget {
-  const PatientPage({Key? key}) : super(key: key);
+  const PatientPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -253,14 +258,18 @@ class PatientPage extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Upcoming Appointments',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue.shade900,
+            Expanded(
+              child: Text(
+                'Upcoming Appointments',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+            const SizedBox(width: 8),
             StreamBuilder<int>(
               stream: appointmentService.getUpcomingAppointmentsCount(),
               builder: (context, snapshot) {
@@ -287,24 +296,36 @@ class PatientPage extends StatelessWidget {
             ),
           ],
         ),
+
         const SizedBox(height: 16),
         StreamBuilder<QuerySnapshot>(
           stream: appointmentService.getAppointmentsStream(
             filterStatus: 'Upcoming',
           ),
           builder: (context, snapshot) {
-            // Filter in UI for upcoming
+            // Filter and sort appointments - latest first
             var appointments = snapshot.hasData
                 ? snapshot.data!.docs.where((doc) {
                     final status = doc['status'];
-                    return status == 'pending' || status == 'upcoming';
+                    return (status == 'pending' || status == 'upcoming') &&
+                        status != 'completed';
                   }).toList()
                 : [];
+
+            // Sort by creation date descending (latest first)
+            appointments.sort((a, b) {
+              final dateA =
+                  (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+              final dateB =
+                  (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+              return dateB.compareTo(dateA);
+            });
 
             if (appointments.isEmpty) {
               return _buildEmptyUpcoming(context);
             }
 
+            // Display only the latest appointment
             final appointment =
                 appointments.first.data() as Map<String, dynamic>;
             final appointmentId = appointments.first.id;
@@ -312,14 +333,46 @@ class PatientPage extends StatelessWidget {
                 (appointment['appointmentDate'] as Timestamp).toDate();
             final timeSlot = appointment['timeSlot'] ?? 'No time specified';
             final reason = appointment['reason'] ?? 'Consultation';
+            final queueNumber = appointment['queueNumber'] as int?;
 
-            return _buildUpcomingCard(
-              context,
-              appointmentId,
-              reason,
-              appointmentDate,
-              timeSlot,
-              appointmentService,
+            return Column(
+              children: [
+                _buildUpcomingCard(
+                  context,
+                  appointmentId,
+                  reason,
+                  appointmentDate,
+                  timeSlot,
+                  queueNumber,
+                  appointmentService,
+                ),
+                if (appointments.length > 1) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const AppointmentHistoryPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.arrow_forward),
+                      label: const Text('View All Appointments'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.blue.shade600),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             );
           },
         ),
@@ -394,6 +447,7 @@ class PatientPage extends StatelessWidget {
     String reason,
     DateTime appointmentDate,
     String timeSlot,
+    int? queueNumber,
     AppointmentService appointmentService,
   ) {
     return Container(
@@ -464,6 +518,27 @@ class PatientPage extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (queueNumber != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.numbers,
+                            size: 16,
+                            color: Colors.orange.shade600,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Queue Number: $queueNumber',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -569,7 +644,7 @@ class PatientPage extends StatelessWidget {
           crossAxisCount: 2,
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 1.2,
+          childAspectRatio: 1.0,
           children: [
             _buildActionCard(
               context,
@@ -601,17 +676,45 @@ class PatientPage extends StatelessWidget {
             ),
             _buildActionCard(
               context,
-              icon: Icons.local_hospital,
-              label: 'Find Doctors',
-              color: Colors.purple.shade800,
-              onTap: () {},
+              icon: Icons.medical_services,
+              label: 'Medical History',
+              color: Colors.deepPurple.shade700,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MedicalHistoryPage(),
+                  ),
+                );
+              },
             ),
             _buildActionCard(
               context,
-              icon: Icons.medication,
+              icon: Icons.receipt_long,
               label: 'Prescriptions',
-              color: Colors.orange.shade800,
-              onTap: () {},
+              color: Colors.teal.shade700,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PrescriptionsPage(),
+                  ),
+                );
+              },
+            ),
+            _buildActionCard(
+              context,
+              icon: Icons.account_balance_wallet,
+              label: 'Billing',
+              color: Colors.orange.shade700,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PatientTransactionsPage(),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -629,7 +732,7 @@ class PatientPage extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -643,24 +746,29 @@ class PatientPage extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, size: 28, color: color),
             ),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade800,
+            const SizedBox(height: 10),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),

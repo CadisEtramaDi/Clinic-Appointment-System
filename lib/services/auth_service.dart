@@ -120,6 +120,7 @@ class AuthService {
     try {
       await _firestore.collection('users').doc(userId).set(
         {
+          'uid': userId,
           'email': email,
           'name': name ?? 'User',
           'role': 'patient', // Default role
@@ -132,7 +133,7 @@ class AuthService {
       print('✓ User document created for: $userId');
     } catch (e) {
       print('✗ Error creating user document: $e');
-      throw e; // Re-throw to handle in calling function
+      rethrow; // Re-throw to handle in calling function
     }
   }
 
@@ -247,7 +248,7 @@ class AuthService {
       // Delete all user's appointments
       final appointments = await _firestore
           .collection('appointments')
-          .where('userId', isEqualTo: user.uid)
+          .where('patientId', isEqualTo: user.uid)
           .get();
 
       for (var doc in appointments.docs) {

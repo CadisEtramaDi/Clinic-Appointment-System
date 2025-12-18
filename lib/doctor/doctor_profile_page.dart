@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../login_page.dart';
 
 class DoctorProfilePage extends StatefulWidget {
-  const DoctorProfilePage({Key? key}) : super(key: key);
+  const DoctorProfilePage({super.key});
 
   @override
   State<DoctorProfilePage> createState() => _DoctorProfilePageState();
@@ -185,7 +185,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                           color: _primaryColor,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 4),
                       Flexible(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -197,7 +197,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                               color: Colors.white,
                             ),
                             textAlign: TextAlign.center,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -207,7 +207,9 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Text(
-                            _userData?['specialization'] ?? 'General Physician',
+                            _userData?['specialty'] ??
+                                _userData?['specialization'] ??
+                                'General Physician',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.white.withOpacity(0.9),
@@ -369,101 +371,6 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                         icon: Icons.badge_outlined,
                         label: 'License No.',
                         value: _userData?['licenseNumber'] ?? 'N/A',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Specializations Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  'Specialization',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _textPrimary,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _buildSpecializationChip(
-                      _userData?['specialization'] ?? 'General Medicine',
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Settings Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  'Settings & Preferences',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _textPrimary,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _cardColor,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      _buildSettingsTile(
-                        icon: Icons.notifications_outlined,
-                        title: 'Notifications',
-                        subtitle: 'Manage notification preferences',
-                        onTap: () {},
-                      ),
-                      Divider(height: 1, color: Colors.grey[200]),
-                      _buildSettingsTile(
-                        icon: Icons.lock_outline,
-                        title: 'Privacy & Security',
-                        subtitle: 'Password and security settings',
-                        onTap: () {},
-                      ),
-                      Divider(height: 1, color: Colors.grey[200]),
-                      _buildSettingsTile(
-                        icon: Icons.schedule,
-                        title: 'Working Hours',
-                        subtitle: 'Set your availability',
-                        onTap: () {},
-                      ),
-                      Divider(height: 1, color: Colors.grey[200]),
-                      _buildSettingsTile(
-                        icon: Icons.refresh,
-                        title: 'Refresh Profile',
-                        subtitle: 'Reload your information',
-                        onTap: _loadUserData,
                       ),
                     ],
                   ),
@@ -655,81 +562,6 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSpecializationChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: _primaryColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primaryColor.withOpacity(0.2)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: _primaryColor,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-
-  Widget _buildSettingsTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 20, color: _primaryColor),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 13, color: _textSecondary),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right, color: _textSecondary, size: 20),
-          ],
-        ),
-      ),
     );
   }
 

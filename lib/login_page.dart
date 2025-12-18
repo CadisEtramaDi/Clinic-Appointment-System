@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -604,64 +604,6 @@ class _LoginPageState extends State<LoginPage>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 32),
-
-                              // Test Accounts Info
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF0F9FF),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFF7DD3FC),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Row(
-                                      children: [
-                                        Icon(
-                                          Icons.info_rounded,
-                                          size: 18,
-                                          color: Color(0xFF0284C7),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Demo Accounts',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0C4A6E),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 14),
-                                    _buildTestAccount(
-                                      '👤',
-                                      'admin@clinic.com',
-                                      'Admin Access',
-                                      const Color(0xFF8B5CF6),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildTestAccount(
-                                      '👨‍⚕️',
-                                      'doctor@clinic.com',
-                                      'Doctor Portal',
-                                      const Color(0xFF10B981),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildTestAccount(
-                                      '🏥',
-                                      'patient@clinic.com',
-                                      'Patient View',
-                                      const Color(0xFF3B82F6),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -755,53 +697,6 @@ class _LoginPageState extends State<LoginPage>
         ),
       ),
       validator: validator,
-    );
-  }
-
-  Widget _buildTestAccount(
-    String emoji,
-    String email,
-    String role,
-    Color color,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  email,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[800],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  role,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.grey[400]),
-        ],
-      ),
     );
   }
 }

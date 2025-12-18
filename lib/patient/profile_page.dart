@@ -7,7 +7,7 @@ import '../login_page.dart';
 import 'patient_page.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({Key? key}) : super(key: key);
+  const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -477,81 +477,62 @@ class _ProfilePageState extends State<ProfilePage>
                   ),
                   const SizedBox(height: 24),
 
-                  // Notification Settings
-                  _buildSection(
-                    title: 'Notification Settings',
-                    children: [
-                      _buildSettingSwitch(
-                        icon: Icons.notifications_active,
-                        label: 'Appointment Reminders',
-                        value: true,
-                        color: Color(0xFF2196F3),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSettingSwitch(
-                        icon: Icons.email,
-                        label: 'Email Notifications',
-                        value: true,
-                        color: Color(0xFF00BCD4),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSettingSwitch(
-                        icon: Icons.sms,
-                        label: 'SMS Notifications',
-                        value: false,
-                        color: Color(0xFF4CAF50),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Account Actions
-                  _buildSection(
-                    title: 'Account Settings',
-                    children: [
-                      _buildEnhancedActionButton(
-                        icon: Icons.lock_outline,
-                        label: 'Change Password',
-                        color: Color(0xFF2196F3),
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Change password coming soon!'),
-                              backgroundColor: Color(0xFF2196F3),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+                  // Logout Button
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: InkWell(
+                      onTap: _showLogoutDialog,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 20,
+                              offset: Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: Icon(
+                                Icons.logout,
+                                color: Colors.red,
+                                size: 28,
                               ),
                             ),
-                          );
-                        },
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                'Logout',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Colors.red,
+                              size: 24,
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      _buildEnhancedActionButton(
-                        icon: Icons.privacy_tip_outlined,
-                        label: 'Privacy Policy',
-                        color: Color(0xFF00BCD4),
-                        onTap: () {},
-                      ),
-                      const SizedBox(height: 12),
-                      _buildEnhancedActionButton(
-                        icon: Icons.help_outline,
-                        label: 'Help & Support',
-                        color: Color(0xFF4CAF50),
-                        onTap: () {},
-                      ),
-                      const SizedBox(height: 12),
-                      _buildEnhancedActionButton(
-                        icon: Icons.logout,
-                        label: 'Logout',
-                        color: Colors.red,
-                        onTap: _showLogoutDialog,
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 32),
-
-                  // Save Button with Gradient
+                  const SizedBox(height: 24),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
@@ -765,115 +746,6 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSettingSwitch({
-    required IconData icon,
-    required String label,
-    required bool value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(icon, size: 28, color: color),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF1565C0),
-              ),
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: (bool newValue) {
-              setState(() {});
-            },
-            activeColor: color,
-            activeTrackColor: color.withOpacity(0.3),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnhancedActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required Color color,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 20,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: color == Colors.red ? Colors.red : Color(0xFF1565C0),
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: color == Colors.red ? Colors.red : Colors.grey.shade400,
-              size: 24,
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -7,7 +7,7 @@ import 'book_appointment_page.dart';
 import 'profile_page.dart';
 
 class AppointmentHistoryPage extends StatefulWidget {
-  const AppointmentHistoryPage({Key? key}) : super(key: key);
+  const AppointmentHistoryPage({super.key});
 
   @override
   State<AppointmentHistoryPage> createState() => _AppointmentHistoryPageState();
@@ -139,7 +139,7 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
       elevation: 0,
       pinned: true,
       floating: true,
-      expandedHeight: 100,
+      expandedHeight: 70,
       automaticallyImplyLeading: false,
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
@@ -151,26 +151,32 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
             ),
           ),
         ),
-        titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+        titlePadding: const EdgeInsets.only(left: 16, bottom: 10, right: 16),
         title: Row(
           children: [
             Container(
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
+                iconSize: 18,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
-            const SizedBox(width: 16),
-            const Text(
-              'Appointment History',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Appointment History',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -520,6 +526,7 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
     final appointmentDate = appointment['appointmentDate'] as Timestamp;
     final timeSlot = appointment['timeSlot'] ?? 'No time specified';
     final reason = appointment['reason'] ?? 'Consultation';
+    final queueNumber = appointment['queueNumber'] as int?;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -618,6 +625,39 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
                       ),
                     ),
                   ),
+                  if (queueNumber != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.numbers,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Q$queueNumber',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -864,7 +904,7 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
 
   Widget _buildBottomNav() {
     return Container(
-      height: 80,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.only(
@@ -880,46 +920,48 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildNavItem(
-            Icons.home_outlined,
-            'Home',
-            false,
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const PatientPage()),
-              );
-            },
-          ),
-          _buildNavItem(
-            Icons.calendar_month,
-            'Book',
-            false,
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BookAppointmentPage(),
-                ),
-              );
-            },
-          ),
-          _buildNavItem(Icons.history, 'History', true, onTap: () {}),
-          _buildNavItem(
-            Icons.person_outline,
-            'Profile',
-            false,
-            onTap: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfilePage()),
-              );
-            },
-          ),
-        ],
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(
+              Icons.home_outlined,
+              'Home',
+              false,
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const PatientPage()),
+                );
+              },
+            ),
+            _buildNavItem(
+              Icons.calendar_month,
+              'Book',
+              false,
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookAppointmentPage(),
+                  ),
+                );
+              },
+            ),
+            _buildNavItem(Icons.history, 'History', true, onTap: () {}),
+            _buildNavItem(
+              Icons.person_outline,
+              'Profile',
+              false,
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfilePage()),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -933,11 +975,12 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
     return GestureDetector(
       onTap: onTap,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               gradient: active
                   ? LinearGradient(
@@ -951,11 +994,11 @@ class _AppointmentHistoryPageState extends State<AppointmentHistoryPage>
             ),
             child: Icon(
               icon,
-              size: 24,
+              size: 22,
               color: active ? const Color(0xFF2196F3) : Colors.grey.shade400,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(

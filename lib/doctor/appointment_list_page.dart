@@ -1,18 +1,31 @@
 import 'package:clinic/doctor/patient_history_page.dart';
 import 'package:clinic/doctor/update_diagnosis_page.dart';
+import 'package:clinic/doctor/doctor_dashboard_page.dart';
+import 'package:clinic/services/appointment_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class AppointmentsListPage extends StatefulWidget {
-  const AppointmentsListPage({Key? key}) : super(key: key);
+  const AppointmentsListPage({super.key});
 
   @override
   State<AppointmentsListPage> createState() => _AppointmentsListPageState();
 }
 
 class _AppointmentsListPageState extends State<AppointmentsListPage> {
-  String _selectedDate = 'Fri, Nov 28, 2025';
-  int? _expandedIndex = 0;
+  late String _selectedDate;
+  String? _expandedKey;
   int _selectedIndex = 3;
+  final AppointmentService _appointmentService = AppointmentService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Set today's date dynamically
+    _selectedDate = DateFormat('EEE, MMM d, yyyy').format(DateTime.now());
+  }
 
   final Color _primaryColor = const Color(0xFF2D5AEE);
   final Color _backgroundColor = const Color(0xFFF8FAFC);
@@ -22,65 +35,32 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
   final Color _successColor = const Color(0xFF10B981);
   final Color _warningColor = const Color(0xFFF59E0B);
 
-  final List<Map<String, dynamic>> _appointments = [
-    {
-      'time': '09:00 AM',
-      'patientName': 'Alice Johnson',
-      'appointmentType': 'Routine Check-up',
-      'status': 'Confirmed',
-      'statusColor': Colors.green,
-      'duration': '30 min',
-      'notes':
-          'Patient reported feeling well. No new symptoms. Discussed diet and exercise plan. Follow-up in 6 months. Blood pressure 120/80.',
-    },
-    {
-      'time': '10:30 AM',
-      'patientName': 'Robert Smith',
-      'appointmentType': 'Post-surgery Follow-up',
-      'status': 'Confirmed',
-      'statusColor': Colors.green,
-      'duration': '45 min',
-      'notes':
-          'Follow-up after knee surgery. Check incision site and mobility.',
-    },
-    {
-      'time': '01:00 PM',
-      'patientName': 'Sophia Lee',
-      'appointmentType': 'Chronic Pain Management',
-      'status': 'Pending',
-      'statusColor': Colors.orange,
-      'duration': '60 min',
-      'notes': 'Monthly check-in for chronic back pain management.',
-    },
-    {
-      'time': '02:30 PM',
-      'patientName': 'David Kim',
-      'appointmentType': 'Initial Consultation',
-      'status': 'New',
-      'statusColor': Colors.blue,
-      'duration': '45 min',
-      'notes': 'New patient consultation for digestive issues.',
-    },
-    {
-      'time': '04:00 PM',
-      'patientName': 'Emily White',
-      'appointmentType': 'Vaccination Appointment',
-      'status': 'Confirmed',
-      'statusColor': Colors.green,
-      'duration': '20 min',
-      'notes': 'Annual flu vaccination appointment.',
-    },
-  ];
-
   void _onNavigationTap(int index) {
     setState(() {
       _selectedIndex = index;
     });
 
     if (index == 0) {
-      Navigator.pop(context);
+      // Navigate to Home (Doctor Dashboard)
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const DoctorDashboardPage(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(-1.0, 0.0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            );
+          },
+        ),
+      );
     } else if (index == 1) {
-      Navigator.push(
+      // Navigate to Diagnosis page
+      Navigator.pushReplacement(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
@@ -97,7 +77,8 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
         ),
       );
     } else if (index == 2) {
-      Navigator.push(
+      // Navigate to Patient History page
+      Navigator.pushReplacement(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
@@ -113,6 +94,9 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
           },
         ),
       );
+    } else if (index == 3) {
+      // Stay on Appointments page (already here)
+      // Do nothing as we're already on this page
     }
   }
 
@@ -332,18 +316,87 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
           ),
 
           // Appointments List
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  index == 0 ? 0 : 12,
-                  20,
-                  index == _appointments.length - 1 ? 80 : 0,
-                ),
-                child: _buildAppointmentCard(index, _appointments[index]),
-              );
-            }, childCount: _appointments.length),
+          SliverToBoxAdapter(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _appointmentService.getDoctorAppointmentsStream(
+                FirebaseAuth.instance.currentUser!.uid,
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Center(
+                      child: CircularProgressIndicator(color: _primaryColor),
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Center(
+                      child: Text(
+                        'No appointments scheduled',
+                        style: TextStyle(color: _textSecondary, fontSize: 14),
+                      ),
+                    ),
+                  );
+                }
+
+                final List<Map<String, dynamic>> appointments =
+                    snapshot.data!.docs
+                        .map(
+                          (doc) => _mapAppointmentData(
+                            doc.data() as Map<String, dynamic>,
+                          ),
+                        )
+                        .where((appointment) {
+                          final status = appointment['statusRaw'] as String?;
+                          return status == 'pending' || status == 'upcoming';
+                        })
+                        .toList()
+                      ..sort((a, b) {
+                        final aDate = a['appointmentDate'] as DateTime?;
+                        final bDate = b['appointmentDate'] as DateTime?;
+                        if (aDate != null && bDate != null) {
+                          final cmp = aDate.compareTo(bDate);
+                          if (cmp != 0) return cmp;
+                        }
+
+                        final aTime = a['time'] as String? ?? '';
+                        final bTime = b['time'] as String? ?? '';
+                        return aTime.compareTo(bTime);
+                      });
+
+                if (appointments.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Center(
+                      child: Text(
+                        'No appointments scheduled',
+                        style: TextStyle(color: _textSecondary, fontSize: 14),
+                      ),
+                    ),
+                  );
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: List.generate(appointments.length, (index) {
+                      final appointment = appointments[index];
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          top: index == 0 ? 0 : 12,
+                          bottom: index == appointments.length - 1 ? 80 : 0,
+                        ),
+                        child: _buildAppointmentCardFromData(appointment),
+                      );
+                    }),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -501,8 +554,11 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
     );
   }
 
-  Widget _buildAppointmentCard(int index, Map<String, dynamic> appointment) {
-    final isExpanded = _expandedIndex == index;
+  Widget _buildAppointmentCardFromData(Map<String, dynamic> appointment) {
+    // Use a simple unique key based on time and patient name
+    final uniqueKey =
+        '${appointment['time']}_${appointment['patientName']}_${appointment['dateLabel']}';
+    final isExpanded = _expandedKey == uniqueKey;
 
     return Container(
       decoration: BoxDecoration(
@@ -521,7 +577,7 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
           InkWell(
             onTap: () {
               setState(() {
-                _expandedIndex = isExpanded ? null : index;
+                _expandedKey = isExpanded ? null : uniqueKey;
               });
             },
             child: Padding(
@@ -548,7 +604,7 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              appointment['time'],
+                              appointment['time'] ?? 'N/A',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -557,7 +613,7 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Duration: ${appointment['duration']}',
+                              'Date: ${appointment['dateLabel']}',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: _textSecondary,
@@ -623,6 +679,27 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
                                 color: _textSecondary,
                               ),
                             ),
+                            if (appointment['queueNumber'] != null) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.numbers,
+                                    size: 14,
+                                    color: Colors.orange.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Queue: ${appointment['queueNumber']}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -641,7 +718,7 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
           ),
 
           // Expanded Content
-          if (isExpanded) ...[
+          if (isExpanded)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Column(
@@ -687,7 +764,7 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          appointment['notes'],
+                          appointment['notes'] ?? 'No notes available',
                           style: TextStyle(
                             fontSize: 14,
                             color: _textSecondary,
@@ -819,9 +896,57 @@ class _AppointmentsListPageState extends State<AppointmentsListPage> {
                 ],
               ),
             ),
-          ],
         ],
       ),
     );
+  }
+
+  Map<String, dynamic> _mapAppointmentData(Map<String, dynamic> data) {
+    final timestamp = data['appointmentDate'];
+    final date = timestamp is Timestamp ? timestamp.toDate() : null;
+    final statusRaw = (data['status'] as String? ?? 'pending').toLowerCase();
+
+    final timeSlot = data['timeSlot'] as String? ?? 'Time not set';
+    final patientName = data['patientName'] as String? ?? 'Patient';
+    final appointmentType = data['reason'] as String? ?? 'Consultation';
+    final notes = (data['additionalNotes'] as String? ?? '').trim();
+    final duration = data['duration'] as String? ?? '30 mins';
+    final queueNumber = data['queueNumber'] as int?;
+
+    return {
+      'time': timeSlot,
+      'duration': duration,
+      'status': _formatStatus(statusRaw),
+      'statusRaw': statusRaw,
+      'statusColor': _getStatusColor(statusRaw),
+      'patientName': patientName,
+      'appointmentType': appointmentType,
+      'notes': notes.isEmpty ? 'No notes available' : notes,
+      'dateLabel': date != null
+          ? DateFormat('EEE, MMM d').format(date)
+          : 'Date not set',
+      'appointmentDate': date,
+      'queueNumber': queueNumber,
+    };
+  }
+
+  String _formatStatus(String status) {
+    if (status.isEmpty) return 'Pending';
+    return status[0].toUpperCase() + status.substring(1);
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'upcoming':
+        return _warningColor;
+      case 'confirmed':
+        return _primaryColor;
+      case 'completed':
+        return _successColor;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return _warningColor;
+    }
   }
 }

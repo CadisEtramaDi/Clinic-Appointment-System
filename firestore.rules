@@ -1,0 +1,168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper function to check user role
+    function hasRole(role) {
+      return isSignedIn() && getUserData().role == role;
+    }
+    
+    // Users collection rules
+    match /users/{userId} {
+      // Allow unauthenticated users to create their own document during registration
+      allow create: if request.auth.uid == userId;
+      
+      // Allow users to read their own document
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      
+      // Allow users to update their own document
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      
+      // Allow admins to read/write any user document
+      allow read, write: if hasRole('admin');
+      
+      // Allow patients to read doctor profiles (for booking appointments)
+      allow read: if isSignedIn() && 
+                     get(/databases/$(database)/documents/users/$(userId)).data.role == 'doctor';
+      
+      // Allow patients to list/query doctors
+      allow list: if isSignedIn();
+    }
+    
+    // Appointments collection rules
+    match /appointments/{appointmentId} {
+      // Allow authenticated users to create appointments
+      allow create: if isSignedIn() && 
+                       request.resource.data.patientId == request.auth.uid;
+      
+      // Allow authenticated users to list/query appointments
+      allow list: if isSignedIn();
+      
+      // Allow patients to read their own appointments
+      allow read: if isSignedIn() && 
+                     (resource.data.patientId == request.auth.uid);
+      
+      // Allow doctors to read appointments assigned to them
+      allow read: if isSignedIn() && 
+                     (resource.data.doctorId == request.auth.uid);
+      
+      // Allow patients to update their own appointments (e.g., cancel)
+      allow update: if isSignedIn() && 
+                       resource.data.patientId == request.auth.uid;
+      
+      // Allow doctors to update appointments assigned to them
+      allow update: if isSignedIn() && 
+                       resource.data.doctorId == request.auth.uid;
+      
+      // Allow admins full access
+      allow read, write: if hasRole('admin');
+    }
+
+    // Patients collection rules
+    match /patients/{patientId} {
+      // Allow users to read their own patient document
+      allow read: if isSignedIn() && request.auth.uid == patientId;
+      
+      // Allow users to write their own patient document
+      allow write: if isSignedIn() && request.auth.uid == patientId;
+      
+      // Allow doctors to read patient data if they have an appointment
+      allow read: if isSignedIn() && exists(/databases/$(database)/documents/appointments/$(request.resource.id));
+      
+      // Allow admins full access
+      allow read, write: if hasRole('admin');
+    }
+
+    // Patient subcollections (prescriptions, vitals, documents, etc.)
+    match /patients/{patientId}/{subcollection=**} {
+      // Allow users to read their own patient documents
+      allow read: if isSignedIn() && request.auth.uid == patientId;
+      
+      // Allow users to write to their own patient documents
+      allow write: if isSignedIn() && request.auth.uid == patientId;
+      
+      // Allow admins full access
+      allow read, write: if hasRole('admin');
+      
+      // Allow doctors to read patient medical records
+      allow read: if isSignedIn() && hasRole('doctor');
+      
+      // Allow doctors to write (add/update) diagnoses, prescriptions, and treatment plans
+      allow write: if isSignedIn() && hasRole('doctor');
+    }
+
+    // Patient records collection (admin dashboard metrics & record management)
+    match /patient_records/{recordId} {
+      // Full access for admins
+      allow read, write: if hasRole('admin');
+
+      // Doctors can read records assigned to them (stored as primaryDoctorId)
+      allow read: if isSignedIn() && resource.data.primaryDoctorId == request.auth.uid;
+
+      // Patients can read their own records if linked via patientId
+      allow read: if isSignedIn() && resource.data.patientId == request.auth.uid;
+    }
+
+    // Audit logs (used for admin recent activity)
+    match /audit_logs/{logId} {
+      allow read, write: if hasRole('admin');
+    }
+
+    // Diagnoses collection rules
+    match /diagnoses/{diagnosisId} {
+      // Allow doctors to create and update diagnoses
+      allow create, update: if isSignedIn() && hasRole('doctor');
+      
+      // Allow patients to read their own diagnoses
+      allow read: if isSignedIn() && resource.data.patientId == request.auth.uid;
+      
+      // Allow doctors to read all diagnoses
+      allow read: if isSignedIn() && hasRole('doctor');
+      
+      // Allow admins full access
+      allow read, write: if hasRole('admin');
+    }
+
+    // Transactions collection rules
+    match /transactions/{transactionId} {
+      // Allow patients to read their own transactions
+      allow read: if isSignedIn() && resource.data.patientId == request.auth.uid;
+      
+      // Allow patients to create transactions (for recording payments)
+      allow create: if isSignedIn() && request.resource.data.patientId == request.auth.uid;
+      
+      // Allow doctors to create transactions related to their appointments
+      // Relaxed: do not require role flag, just authenticated doctorId match
+      allow create: if isSignedIn() &&
+               request.resource.data.doctorId == request.auth.uid;
+      
+      // Allow patients to update their own transactions (e.g., mark as paid)
+      allow update: if isSignedIn() && resource.data.patientId == request.auth.uid;
+      
+      // Allow doctors to update transactions related to their appointments
+      // Relaxed: do not require role flag, just authenticated doctorId match
+      allow update: if isSignedIn() && resource.data.doctorId == request.auth.uid;
+      
+      // Allow admins full access to all transactions
+      allow read, write: if hasRole('admin');
+      
+      // Allow doctors to read transactions related to their appointments
+      allow read: if isSignedIn() && hasRole('doctor');
+    }
+    
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:clinic/models/appointment_model.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'manage_users_page.dart';
 import 'manage_patient_records_page.dart';
 
 class ManageAppointmentsPage extends StatefulWidget {
-  const ManageAppointmentsPage({Key? key}) : super(key: key);
+  const ManageAppointmentsPage({super.key});
 
   @override
   State<ManageAppointmentsPage> createState() => _ManageAppointmentsPageState();
@@ -12,7 +15,13 @@ class ManageAppointmentsPage extends StatefulWidget {
 class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
   String selectedDoctor = 'All Doctors';
   String selectedStatus = 'All Statuses';
+  String _dateFilter = 'Today';
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
+  final TextEditingController _searchController = TextEditingController();
   int _selectedIndex = 2;
+  Stream<QuerySnapshot>? _appointmentsStream;
+
   final Color _primaryColor = const Color(0xFF2D5AEE);
   final Color _backgroundColor = const Color(0xFFF8FAFC);
   final Color _cardColor = Colors.white;
@@ -21,39 +30,109 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
   final Color _successColor = const Color(0xFF10B981);
   final Color _warningColor = const Color(0xFFF59E0B);
 
-  final List<Appointment> appointments = [
-    Appointment(
-      time: '09:00 AM',
-      doctorName: 'Dr. Elara Vance',
-      patientName: 'Michael Scott',
-      reason: 'Routine check-up and general health assessment.',
-      status: AppointmentStatus.confirmed,
-      doctorSpecialty: 'General Physician',
-      patientAge: 42,
-      duration: '30 min',
-    ),
-    Appointment(
-      time: '10:30 AM',
-      doctorName: 'Dr. Marcus Thorne',
-      patientName: 'Pam Beesly',
-      reason: 'Follow-up on recent blood test results.',
-      status: AppointmentStatus.pending,
-      doctorSpecialty: 'Cardiologist',
-      patientAge: 35,
-      duration: '45 min',
-    ),
-    Appointment(
-      time: '11:45 AM',
-      doctorName: 'Dr. Sophia Chen',
-      patientName: 'Dwight Schrute',
-      reason:
-          'Consultation for chronic back pain. Needs new physical therapy evaluation.',
-      status: AppointmentStatus.rescheduled,
-      doctorSpecialty: 'Orthopedist',
-      patientAge: 38,
-      duration: '60 min',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _updateAppointmentsStream();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _updateAppointmentsStream() {
+    setState(() {
+      _appointmentsStream = _getFilteredAppointmentsStream();
+    });
+  }
+
+  Stream<QuerySnapshot> _getFilteredAppointmentsStream() {
+    Query query = FirebaseFirestore.instance.collection('appointments');
+
+    // Apply date filter
+    DateTime now = DateTime.now();
+    DateTime startDate;
+    DateTime endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    switch (_dateFilter) {
+      case 'Today':
+        startDate = DateTime(now.year, now.month, now.day);
+        break;
+      case 'This Week':
+        startDate = now.subtract(Duration(days: now.weekday - 1));
+        startDate = DateTime(startDate.year, startDate.month, startDate.day);
+        endDate = startDate.add(const Duration(days: 7));
+        break;
+      case 'This Month':
+        startDate = DateTime(now.year, now.month, 1);
+        endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+        break;
+      case 'Custom':
+        if (_customStartDate != null && _customEndDate != null) {
+          startDate = _customStartDate!;
+          endDate = DateTime(
+            _customEndDate!.year,
+            _customEndDate!.month,
+            _customEndDate!.day,
+            23,
+            59,
+            59,
+          );
+        } else {
+          startDate = DateTime(2000, 1, 1);
+        }
+        break;
+      default: // All
+        return query.orderBy('appointmentDate', descending: false).snapshots();
+    }
+
+    return query
+        .where(
+          'appointmentDate',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+        )
+        .where(
+          'appointmentDate',
+          isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+        )
+        .orderBy('appointmentDate', descending: false)
+        .snapshots();
+  }
+
+  List<AppointmentModel> _filterAppointments(
+    List<AppointmentModel> appointments,
+  ) {
+    var filtered = appointments;
+
+    // Apply status filter
+    if (selectedStatus != 'All Statuses') {
+      filtered = filtered
+          .where((a) => a.status.toLowerCase() == selectedStatus.toLowerCase())
+          .toList();
+    }
+
+    // Apply doctor filter
+    if (selectedDoctor != 'All Doctors') {
+      filtered = filtered.where((a) => a.doctorName == selectedDoctor).toList();
+    }
+
+    // Apply search filter
+    if (_searchController.text.isNotEmpty) {
+      final searchTerm = _searchController.text.toLowerCase();
+      filtered = filtered
+          .where(
+            (a) =>
+                (a.patientName ?? '').toLowerCase().contains(searchTerm) ||
+                (a.doctorName ?? '').toLowerCase().contains(searchTerm) ||
+                a.reason.toLowerCase().contains(searchTerm),
+          )
+          .toList();
+    }
+
+    return filtered;
+  }
 
   void _onNavItemTapped(int index) {
     if (index == 0) {
@@ -137,9 +216,9 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
                     color: _backgroundColor,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.search, color: _textPrimary),
+                  child: Icon(Icons.add, color: _textPrimary),
                 ),
-                onPressed: () {},
+                onPressed: () => _showCreateAppointmentDialog(),
               ),
             ],
           ),
@@ -149,36 +228,98 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Stats Cards
+                  // Search Bar
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search by patient, doctor, or reason...',
+                      prefixIcon: Icon(Icons.search, color: _textSecondary),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(Icons.clear, color: _textSecondary),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: _cardColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: _textSecondary.withOpacity(0.2),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: _textSecondary.withOpacity(0.2),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Date Range Filter
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: _buildStatCard(
-                          value: '12',
-                          label: 'Today',
-                          color: _primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          value: '5',
-                          label: 'Pending',
-                          color: _warningColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          value: '8',
-                          label: 'Confirmed',
-                          color: _successColor,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _dateFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Date Range',
+                            prefixIcon: Icon(
+                              Icons.calendar_today,
+                              color: _primaryColor,
+                            ),
+                            filled: true,
+                            fillColor: _cardColor,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: _textSecondary.withOpacity(0.2),
+                              ),
+                            ),
+                          ),
+                          items:
+                              [
+                                    'Today',
+                                    'This Week',
+                                    'This Month',
+                                    'Custom',
+                                    'All',
+                                  ]
+                                  .map(
+                                    (filter) => DropdownMenuItem(
+                                      value: filter,
+                                      child: Text(filter),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (value) {
+                            if (value == 'Custom') {
+                              _showCustomDateRangePicker();
+                            } else {
+                              setState(() {
+                                _dateFilter = value!;
+                                _updateAppointmentsStream();
+                              });
+                            }
+                          },
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
+
+                  // Stats cards removed per request
+                  const SizedBox(height: 0),
 
                   // Date and Create Section
                   Row(
@@ -224,9 +365,11 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    const Text(
-                                      'Tuesday, May 14, 2024',
-                                      style: TextStyle(
+                                    Text(
+                                      DateFormat(
+                                        'EEEE, MMMM dd, yyyy',
+                                      ).format(DateTime.now()),
+                                      style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -333,24 +476,151 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+
+                  StreamBuilder<QuerySnapshot>(
+                    stream: _appointmentsStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      }
+
+                      if (snapshot.hasError) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Error loading appointments: ${snapshot.error}',
+                            style: TextStyle(color: _warningColor),
+                          ),
+                        );
+                      }
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No appointments found.',
+                            style: TextStyle(color: _textSecondary),
+                          ),
+                        );
+                      }
+
+                      final allItems = snapshot.data!.docs
+                          .map((doc) => AppointmentModel.fromFirestore(doc))
+                          .toList();
+
+                      final items = _filterAppointments(allItems);
+
+                      final pending = items
+                          .where(
+                            (a) =>
+                                (a.status.toLowerCase() == 'pending') ||
+                                (a.status.toLowerCase() == 'upcoming'),
+                          )
+                          .length;
+                      final confirmed = items
+                          .where((a) => a.status.toLowerCase() == 'confirmed')
+                          .length;
+
+                      return Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(
+                                  value: items.length.toString(),
+                                  label: 'Total',
+                                  color: _primaryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(
+                                  value: pending.toString(),
+                                  label: 'Pending/Upcoming',
+                                  color: _warningColor,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(
+                                  value: confirmed.toString(),
+                                  label: 'Confirmed',
+                                  color: _successColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Column(
+                            children: [
+                              for (int i = 0; i < items.length; i++)
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    0,
+                                    i == 0 ? 0 : 12,
+                                    0,
+                                    i == items.length - 1 ? 24 : 0,
+                                  ),
+                                  child: FutureBuilder<int>(
+                                    future: _getPatientAge(items[i].patientId),
+                                    builder: (context, ageSnapshot) {
+                                      final patientAge = ageSnapshot.data ?? 0;
+                                      final appointment = Appointment(
+                                        time: items[i].timeSlot.isNotEmpty
+                                            ? items[i].timeSlot
+                                            : DateFormat('hh:mm a').format(
+                                                items[i].appointmentDate,
+                                              ),
+                                        doctorName:
+                                            items[i].doctorName ?? 'Doctor',
+                                        patientName:
+                                            items[i].patientName ?? 'Patient',
+                                        reason: items[i].reason,
+                                        status: _mapStatus(items[i].status),
+                                        doctorSpecialty: 'Specialist',
+                                        patientAge: patientAge,
+                                        duration:
+                                            items[i]
+                                                    .additionalNotes
+                                                    ?.isNotEmpty ==
+                                                true
+                                            ? items[i].additionalNotes!
+                                            : '30 min',
+                                      );
+
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            _showAppointmentDetails(items[i]),
+                                        child: AppointmentCard(
+                                          appointment: appointment,
+                                          appointmentModel: items[i],
+                                          onEdit: () =>
+                                              _showEditAppointmentDialog(
+                                                items[i],
+                                              ),
+                                          onCancel: () =>
+                                              _showCancelDialog(items[i]),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
-          ),
-
-          // Appointments List
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  index == 0 ? 0 : 12,
-                  20,
-                  index == appointments.length - 1 ? 80 : 0,
-                ),
-                child: AppointmentCard(appointment: appointments[index]),
-              );
-            }, childCount: appointments.length),
           ),
         ],
       ),
@@ -538,13 +808,521 @@ class _ManageAppointmentsPageState extends State<ManageAppointmentsPage> {
       ),
     );
   }
+
+  Appointment _toAppointment(AppointmentModel model) {
+    final time = (model.timeSlot.isNotEmpty)
+        ? model.timeSlot
+        : DateFormat('hh:mm a').format(model.appointmentDate);
+    final duration = model.additionalNotes?.isNotEmpty == true
+        ? model.additionalNotes!
+        : '30 min';
+
+    return Appointment(
+      time: time,
+      doctorName: model.doctorName ?? 'Doctor',
+      patientName: model.patientName ?? 'Patient',
+      reason: model.reason,
+      status: _mapStatus(model.status),
+      doctorSpecialty: 'Specialist',
+      patientAge: 0,
+      duration: duration,
+    );
+  }
+
+  Future<int> _getPatientAge(String patientId) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(patientId)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final age = data?['age'] as int?;
+        if (age != null) return age;
+
+        // Calculate from birthdate if age not stored
+        final birthdate = data?['birthdate'];
+        if (birthdate is Timestamp) {
+          final now = DateTime.now();
+          final birth = birthdate.toDate();
+          int calculatedAge = now.year - birth.year;
+          if (now.month < birth.month ||
+              (now.month == birth.month && now.day < birth.day)) {
+            calculatedAge--;
+          }
+          return calculatedAge;
+        }
+      }
+    } catch (e) {
+      print('Error fetching patient age: $e');
+    }
+    return 0;
+  }
+
+  // Dialog Methods
+  void _showCustomDateRangePicker() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      initialDateRange: _customStartDate != null && _customEndDate != null
+          ? DateTimeRange(start: _customStartDate!, end: _customEndDate!)
+          : null,
+    );
+
+    if (picked != null) {
+      setState(() {
+        _dateFilter = 'Custom';
+        _customStartDate = picked.start;
+        _customEndDate = picked.end;
+        _updateAppointmentsStream();
+      });
+    } else {
+      setState(() {
+        _dateFilter = 'Today';
+      });
+    }
+  }
+
+  void _showAppointmentDetails(AppointmentModel appointment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Appointment Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Patient', appointment.patientName ?? 'N/A'),
+              _buildDetailRow('Doctor', appointment.doctorName ?? 'N/A'),
+              _buildDetailRow(
+                'Date',
+                DateFormat('MMM dd, yyyy').format(appointment.appointmentDate),
+              ),
+              _buildDetailRow('Time', appointment.timeSlot),
+              _buildDetailRow(
+                'Queue Number',
+                '#${appointment.queueNumber ?? 'N/A'}',
+              ),
+              _buildDetailRow('Status', appointment.status.toUpperCase()),
+              _buildDetailRow('Reason', appointment.reason),
+              if (appointment.additionalNotes?.isNotEmpty == true)
+                _buildDetailRow('Notes', appointment.additionalNotes!),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showEditAppointmentDialog(appointment);
+            },
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: TextStyle(color: _textPrimary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditAppointmentDialog(AppointmentModel appointment) {
+    final dateController = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(appointment.appointmentDate),
+    );
+    String selectedTimeSlot = appointment.timeSlot;
+    String selectedStatus = appointment.status;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Appointment'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: dateController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Date',
+                  prefixIcon: Icon(Icons.calendar_today),
+                  border: OutlineInputBorder(),
+                ),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: appointment.appointmentDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (date != null) {
+                    dateController.text = DateFormat('yyyy-MM-dd').format(date);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedTimeSlot,
+                decoration: const InputDecoration(
+                  labelText: 'Time Slot',
+                  border: OutlineInputBorder(),
+                ),
+                items:
+                    [
+                          '8:00 AM - 9:00 AM',
+                          '9:00 AM - 10:00 AM',
+                          '10:00 AM - 11:00 AM',
+                          '11:00 AM - 12:00 PM',
+                          '1:00 PM - 2:00 PM',
+                          '2:00 PM - 3:00 PM',
+                          '3:00 PM - 4:00 PM',
+                          '4:00 PM - 5:00 PM',
+                        ]
+                        .map(
+                          (slot) =>
+                              DropdownMenuItem(value: slot, child: Text(slot)),
+                        )
+                        .toList(),
+                onChanged: (value) => selectedTimeSlot = value!,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedStatus,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                ),
+                items: ['pending', 'confirmed', 'completed', 'cancelled']
+                    .map(
+                      (status) => DropdownMenuItem(
+                        value: status,
+                        child: Text(status.toUpperCase()),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => selectedStatus = value!,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final newDate = DateFormat(
+                  'yyyy-MM-dd',
+                ).parse(dateController.text);
+                await FirebaseFirestore.instance
+                    .collection('appointments')
+                    .doc(appointment.id)
+                    .update({
+                      'appointmentDate': Timestamp.fromDate(newDate),
+                      'timeSlot': selectedTimeSlot,
+                      'status': selectedStatus,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Appointment updated successfully'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCancelDialog(AppointmentModel appointment) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Appointment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Are you sure you want to cancel this appointment?'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Cancellation Reason',
+                border: OutlineInputBorder(),
+                hintText: 'Optional',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Keep Appointment'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              try {
+                await FirebaseFirestore.instance
+                    .collection('appointments')
+                    .doc(appointment.id)
+                    .update({
+                      'status': 'cancelled',
+                      'cancellationReason': reasonController.text.isNotEmpty
+                          ? reasonController.text
+                          : 'No reason provided',
+                      'cancelledAt': FieldValue.serverTimestamp(),
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Appointment cancelled')),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Cancel Appointment'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreateAppointmentDialog() {
+    final patientNameController = TextEditingController();
+    final doctorNameController = TextEditingController();
+    final reasonController = TextEditingController();
+    final notesController = TextEditingController();
+    final dateController = TextEditingController();
+    String selectedTimeSlot = '9:00 AM - 10:00 AM';
+    DateTime selectedDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Appointment'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: patientNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Patient Name *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: doctorNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Doctor Name *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: dateController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Date *',
+                  prefixIcon: Icon(Icons.calendar_today),
+                  border: OutlineInputBorder(),
+                ),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (date != null) {
+                    selectedDate = date;
+                    dateController.text = DateFormat(
+                      'MMM dd, yyyy',
+                    ).format(date);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedTimeSlot,
+                decoration: const InputDecoration(
+                  labelText: 'Time Slot *',
+                  border: OutlineInputBorder(),
+                ),
+                items:
+                    [
+                          '8:00 AM - 9:00 AM',
+                          '9:00 AM - 10:00 AM',
+                          '10:00 AM - 11:00 AM',
+                          '11:00 AM - 12:00 PM',
+                          '1:00 PM - 2:00 PM',
+                          '2:00 PM - 3:00 PM',
+                          '3:00 PM - 4:00 PM',
+                          '4:00 PM - 5:00 PM',
+                        ]
+                        .map(
+                          (slot) =>
+                              DropdownMenuItem(value: slot, child: Text(slot)),
+                        )
+                        .toList(),
+                onChanged: (value) => selectedTimeSlot = value!,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Reason for Visit *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Additional Notes',
+                  border: OutlineInputBorder(),
+                  hintText: 'Optional',
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (patientNameController.text.isEmpty ||
+                  doctorNameController.text.isEmpty ||
+                  dateController.text.isEmpty ||
+                  reasonController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill all required fields'),
+                  ),
+                );
+                return;
+              }
+
+              try {
+                await FirebaseFirestore.instance
+                    .collection('appointments')
+                    .add({
+                      'patientName': patientNameController.text,
+                      'patientId': 'admin-created',
+                      'doctorName': doctorNameController.text,
+                      'doctorId': 'admin-assigned',
+                      'appointmentDate': Timestamp.fromDate(selectedDate),
+                      'timeSlot': selectedTimeSlot,
+                      'reason': reasonController.text,
+                      'additionalNotes': notesController.text,
+                      'status': 'pending',
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Appointment created successfully'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  AppointmentStatus _mapStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return AppointmentStatus.confirmed;
+      case 'rescheduled':
+        return AppointmentStatus.rescheduled;
+      default:
+        return AppointmentStatus.pending;
+    }
+  }
 }
 
 class AppointmentCard extends StatelessWidget {
   final Appointment appointment;
+  final AppointmentModel appointmentModel;
+  final VoidCallback? onEdit;
+  final VoidCallback? onCancel;
 
-  const AppointmentCard({Key? key, required this.appointment})
-    : super(key: key);
+  const AppointmentCard({
+    super.key,
+    required this.appointment,
+    required this.appointmentModel,
+    this.onEdit,
+    this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -678,7 +1456,7 @@ class AppointmentCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Age: ${appointment.patientAge}',
+                        'Age: ${appointment.patientAge > 0 ? appointment.patientAge : '—'}',
                         style: TextStyle(fontSize: 14, color: textSecondary),
                       ),
                     ],
@@ -743,7 +1521,7 @@ class AppointmentCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () {},
+                          onPressed: onEdit,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(
@@ -772,7 +1550,7 @@ class AppointmentCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () {},
+                          onPressed: onEdit,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(
@@ -804,7 +1582,7 @@ class AppointmentCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () {},
+                          onPressed: onEdit,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(
@@ -837,7 +1615,7 @@ class AppointmentCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () {},
+                          onPressed: onCancel,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(

@@ -8,73 +8,81 @@ class AppointmentService {
   // Get current user
   User? get currentUser => _auth.currentUser;
 
-  // Fetch booked time slots for a specific date
-  Future<List<String>> fetchBookedTimeSlots(DateTime date) async {
+  // Fetch booked time slots for a specific date and doctor
+  Future<List<String>> fetchBookedTimeSlots(
+    DateTime date, {
+    String? doctorId,
+  }) async {
     try {
-      final user = currentUser;
-      if (user == null) return [];
-
       final startOfDay = DateTime(date.year, date.month, date.day);
-      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
 
-      final snapshot = await _firestore
+      Query query = _firestore
           .collection('appointments')
           .where(
             'appointmentDate',
             isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
           )
-          .where(
-            'appointmentDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
-          )
-          .get();
+          .where('appointmentDate', isLessThan: Timestamp.fromDate(endOfDay));
 
-      final bookedSlots = snapshot.docs
+      // Filter by doctor if provided
+      if (doctorId != null && doctorId.isNotEmpty) {
+        query = query.where('doctorId', isEqualTo: doctorId);
+      }
+
+      final snapshot = await query.get();
+
+      // Filter by status in memory to avoid complex index
+      return snapshot.docs
           .where((doc) {
-            final status = doc.data()['status'];
-            return status == 'pending' || status == 'upcoming';
+            final data = doc.data() as Map<String, dynamic>?;
+            final status = data?['status'] as String?;
+            return status != null &&
+                ['pending', 'upcoming', 'confirmed'].contains(status);
           })
-          .map((doc) => doc.data()['timeSlot'] as String)
+          .map(
+            (d) =>
+                ((d.data() as Map<String, dynamic>?)?['timeSlot'] as String?) ??
+                '',
+          )
+          .where((s) => s.isNotEmpty)
           .toList();
-
-      return bookedSlots;
     } catch (e) {
+      print('Error fetching booked slots: $e');
       return [];
     }
   }
 
-  // Check if a time slot is available
-  Future<bool> isTimeSlotAvailable(DateTime date, String timeSlot) async {
+  // Check if a time slot is available (per doctor when provided)
+  Future<bool> isTimeSlotAvailable(
+    DateTime date,
+    String timeSlot, {
+    String? doctorId,
+  }) async {
     try {
-      final user = currentUser;
-      if (user == null) return false;
-
       final startOfDay = DateTime(date.year, date.month, date.day);
-      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
 
-      final snapshot = await _firestore
+      Query query = _firestore
           .collection('appointments')
           .where(
             'appointmentDate',
             isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
           )
-          .where(
-            'appointmentDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
-          )
-          .get();
+          .where('appointmentDate', isLessThan: Timestamp.fromDate(endOfDay))
+          .where('timeSlot', isEqualTo: timeSlot)
+          .where('status', whereIn: ['pending', 'upcoming', 'confirmed']);
 
-      final hasConflict = snapshot.docs.any((doc) {
-        final data = doc.data();
-        final status = data['status'];
-        final slot = data['timeSlot'];
-        return slot == timeSlot &&
-            (status == 'pending' || status == 'upcoming');
-      });
+      // Always check doctor-specific availability
+      if (doctorId != null && doctorId.isNotEmpty) {
+        query = query.where('doctorId', isEqualTo: doctorId);
+      }
 
-      return !hasConflict;
+      final existing = await query.limit(1).get();
+      return existing.docs.isEmpty;
     } catch (e) {
-      return false;
+      print('Error checking slot availability: $e');
+      return false; // Safer to block booking on error
     }
   }
 
@@ -84,6 +92,9 @@ class AppointmentService {
     required String timeSlot,
     required String reason,
     String? additionalNotes,
+    required String doctorId,
+    required String doctorName,
+    String? patientName,
   }) async {
     try {
       final user = currentUser;
@@ -94,31 +105,113 @@ class AppointmentService {
         };
       }
 
-      final isAvailable = await isTimeSlotAvailable(date, timeSlot);
-      if (!isAvailable) {
+      // Check availability first - simplified query to avoid index requirements
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
+      final existingQuery = await _firestore
+          .collection('appointments')
+          .where('doctorId', isEqualTo: doctorId)
+          .where(
+            'appointmentDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .where('appointmentDate', isLessThan: Timestamp.fromDate(endOfDay))
+          .get();
+
+      // Filter in memory for the specific time slot and status
+      final hasConflict = existingQuery.docs.any((doc) {
+        final data = doc.data();
+        return data['timeSlot'] == timeSlot &&
+            ['pending', 'upcoming', 'confirmed'].contains(data['status']);
+      });
+
+      if (hasConflict) {
         return {
           'success': false,
           'message': 'This time slot is no longer available',
         };
       }
 
-      final appointmentData = {
+      // Calculate queue number for this time slot
+      final queueNumber = await _getNextQueueNumber(
+        doctorId: doctorId,
+        date: date,
+        timeSlot: timeSlot,
+      );
+
+      // Create appointment document
+      final appointmentRef = _firestore.collection('appointments').doc();
+
+      // Write appointment
+      await appointmentRef.set({
         'userId': user.uid,
+        'patientId': user.uid,
+        'patientName': patientName ?? user.displayName ?? 'Patient',
+        'doctorId': doctorId,
+        'doctorName': doctorName,
         'appointmentDate': Timestamp.fromDate(date),
         'timeSlot': timeSlot,
         'reason': reason,
         'additionalNotes': additionalNotes?.trim() ?? '',
         'status': 'pending',
+        'queueNumber': queueNumber,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return {
+        'success': true,
+        'message':
+            'Appointment booked successfully! Queue number: $queueNumber',
+        'appointmentId': appointmentRef.id,
       };
-
-      await _firestore.collection('appointments').add(appointmentData);
-
-      return {'success': true, 'message': 'Appointment booked successfully!'};
     } catch (e) {
+      print('Error booking appointment: $e');
       return {'success': false, 'message': 'Error: ${e.toString()}'};
     }
+  }
+
+  // Get next queue number for a specific time slot
+  Future<int> _getNextQueueNumber({
+    required String doctorId,
+    required DateTime date,
+    required String timeSlot,
+  }) async {
+    try {
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
+      final snapshot = await _firestore
+          .collection('appointments')
+          .where('doctorId', isEqualTo: doctorId)
+          .where(
+            'appointmentDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .where('appointmentDate', isLessThan: Timestamp.fromDate(endOfDay))
+          .get();
+
+      // Count ALL appointments for the day (not just same time slot)
+      final allDayAppointments = snapshot.docs.where((doc) {
+        final data = doc.data();
+        return ['pending', 'upcoming', 'confirmed'].contains(data['status']);
+      }).toList();
+
+      // Return next queue number (current count + 1)
+      return allDayAppointments.length + 1;
+    } catch (e) {
+      print('Error calculating queue number: $e');
+      return 1; // Default to 1 if error
+    }
+  }
+
+  // yyyyMMdd key for day partitioning
+  String _dayKey(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y$m$d';
   }
 
   // Get appointments stream for current user (FIXED - no orderBy)
@@ -131,12 +224,28 @@ class AppointmentService {
       return const Stream.empty();
     }
 
-    // Only query by userId - sorting will be done in memory
+    // Only query by patientId - sorting will be done in memory
     Query query = _firestore
         .collection('appointments')
-        .where('userId', isEqualTo: user.uid);
+        .where('patientId', isEqualTo: user.uid);
 
     return query.snapshots();
+  }
+
+  // Get appointments stream for current doctor
+  Stream<QuerySnapshot> getDoctorAppointmentsStream(String doctorId) {
+    return _firestore
+        .collection('appointments')
+        .where('doctorId', isEqualTo: doctorId)
+        .snapshots();
+  }
+
+  // Get unique patients for a doctor
+  Stream<QuerySnapshot> getDoctorPatients(String doctorId) {
+    return _firestore
+        .collection('appointments')
+        .where('doctorId', isEqualTo: doctorId)
+        .snapshots();
   }
 
   // Get upcoming appointments count
@@ -148,7 +257,7 @@ class AppointmentService {
 
     return _firestore
         .collection('appointments')
-        .where('userId', isEqualTo: user.uid)
+        .where('patientId', isEqualTo: user.uid)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.where((doc) {
@@ -167,7 +276,7 @@ class AppointmentService {
 
     return _firestore
         .collection('appointments')
-        .where('userId', isEqualTo: user.uid)
+        .where('patientId', isEqualTo: user.uid)
         .snapshots()
         .map((snapshot) {
           final docs = snapshot.docs;
@@ -201,6 +310,21 @@ class AppointmentService {
     }
   }
 
+  // Update appointment status
+  Future<void> updateAppointmentStatus(
+    String appointmentId,
+    String status,
+  ) async {
+    try {
+      await _firestore.collection('appointments').doc(appointmentId).update({
+        'status': status,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Error updating appointment status: $e');
+    }
+  }
+
   // Get user data stream
   Stream<DocumentSnapshot> getUserDataStream() {
     final user = currentUser;
@@ -225,5 +349,62 @@ class AppointmentService {
     return date.year == now.year &&
         date.month == now.month &&
         date.day == now.day;
+  }
+
+  // Clear all data except user accounts
+  Future<void> clearAllDataExceptUsers() async {
+    try {
+      // Delete all appointments
+      final appointments = await _firestore.collection('appointments').get();
+      for (var doc in appointments.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete all patient records and their subcollections
+      final patients = await _firestore.collection('patients').get();
+      for (var patientDoc in patients.docs) {
+        // Delete diagnoses
+        final diagnoses = await patientDoc.reference
+            .collection('diagnoses')
+            .get();
+        for (var diagDoc in diagnoses.docs) {
+          await diagDoc.reference.delete();
+        }
+
+        // Delete prescriptions
+        final prescriptions = await patientDoc.reference
+            .collection('prescriptions')
+            .get();
+        for (var prescDoc in prescriptions.docs) {
+          await prescDoc.reference.delete();
+        }
+
+        // Delete the patient document itself
+        await patientDoc.reference.delete();
+      }
+
+      // Delete all doctor records (but keep user accounts via Auth)
+      final doctors = await _firestore.collection('doctors').get();
+      for (var doc in doctors.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete all admin records (but keep user accounts via Auth)
+      final admins = await _firestore.collection('admins').get();
+      for (var doc in admins.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete all notifications
+      final notifications = await _firestore.collection('notifications').get();
+      for (var doc in notifications.docs) {
+        await doc.reference.delete();
+      }
+
+      print('All data cleared successfully except user accounts');
+    } catch (e) {
+      print('Error clearing data: $e');
+      rethrow;
+    }
   }
 }

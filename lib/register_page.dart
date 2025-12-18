@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -212,12 +212,16 @@ class _RegisterPageState extends State<RegisterPage> {
       } catch (e) {
         setState(() => _isLoading = false);
         print('✗ Unexpected error: $e');
+        print('✗ Error type: ${e.runtimeType}');
+
+        String errorMsg = 'Error: ${e.toString()}';
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $e'),
+              content: Text(errorMsg),
               backgroundColor: Colors.red.shade800,
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -288,7 +292,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       children: [
                         // Role Selection
                         DropdownButtonFormField<String>(
-                          value: _selectedRole,
+                          initialValue: _selectedRole,
                           decoration: inputDecoration(
                             "Register as",
                             Icons.badge_outlined,
@@ -340,7 +344,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                         // Gender
                         DropdownButtonFormField<String>(
-                          value: _selectedGender,
+                          initialValue: _selectedGender,
                           decoration: inputDecoration("Gender", Icons.person),
                           items: ["Male", "Female", "Other"]
                               .map(
@@ -455,8 +459,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             if (value!.isEmpty) return "Enter a password";
-                            if (value.length < 6)
+                            if (value.length < 6) {
                               return "Password must be at least 6 characters";
+                            }
                             return null;
                           },
                         ),
@@ -473,8 +478,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             if (value!.isEmpty) return "Confirm your password";
-                            if (value != _passwordController.text)
+                            if (value != _passwordController.text) {
                               return "Passwords do not match";
+                            }
                             return null;
                           },
                         ),

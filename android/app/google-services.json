@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "762047191126",
-    "project_id": "clinic-appointment-403a3",
-    "storage_bucket": "clinic-appointment-403a3.firebasestorage.app"
+    "project_number": "990752512202",
+    "project_id": "clinic-4cc38",
+    "storage_bucket": "clinic-4cc38.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:762047191126:android:15dd4d9d21319ddd93c3f7",
+        "mobilesdk_app_id": "1:990752512202:android:c19f8e52cce6857c183c33",
         "android_client_info": {
           "package_name": "com.example.clinic"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAKNkDBmWWjvcc-MN32QqtHlvrewntQ5ko"
+          "current_key": "AIzaSyAMA9vaUd21kcPvVEybdF8ja35npHo917Q"
         }
       ],
       "services": {

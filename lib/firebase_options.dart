@@ -41,48 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: "AIzaSyDcf4_owo9gur0c_pWCUfKZ8eiYE2kAz0c",
-    authDomain: "clinic-appointment-403a3.firebaseapp.com",
-    projectId: "clinic-appointment-403a3",
-    storageBucket: "clinic-appointment-403a3.firebasestorage.app",
-    messagingSenderId: "762047191126",
-    appId: "1:762047191126:web:69962d3fd850380593c3f7",
-    measurementId: "G-6LR5Y6Z16F",
+    apiKey: 'AIzaSyDS2OYNtIBD5A_AQFXAHRdSieiZFV-Mumg',
+    appId: '1:990752512202:web:1e15c8cb716cfb1a183c33',
+    messagingSenderId: '990752512202',
+    projectId: 'clinic-4cc38',
+    authDomain: 'clinic-4cc38.firebaseapp.com',
+    storageBucket: 'clinic-4cc38.firebasestorage.app',
+    measurementId: 'G-THLJS9ZN4M',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAKNkDBmWWjvcc-MN32QqtHlvrewntQ5ko',
-    appId: '1:762047191126:android:15dd4d9d21319ddd93c3f7',
-    messagingSenderId: '762047191126',
-    projectId: 'clinic-appointment-403a3',
-    storageBucket: 'clinic-appointment-403a3.firebasestorage.app',
+    apiKey: 'AIzaSyAMA9vaUd21kcPvVEybdF8ja35npHo917Q',
+    appId: '1:990752512202:android:c19f8e52cce6857c183c33',
+    messagingSenderId: '990752512202',
+    projectId: 'clinic-4cc38',
+    storageBucket: 'clinic-4cc38.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyB-kwr4yMG1AAabnylHqAMTmsnhxc6tqts',
-    appId: '1:762047191126:ios:0f4ff91d1c2e45b993c3f7',
-    messagingSenderId: '762047191126',
-    projectId: 'clinic-appointment-403a3',
-    storageBucket: 'clinic-appointment-403a3.firebasestorage.app',
+    apiKey: 'AIzaSyBz9z3Kjmgf6q-54Q16vTsRP_UZ_CKkWko',
+    appId: '1:990752512202:ios:283374c575e23826183c33',
+    messagingSenderId: '990752512202',
+    projectId: 'clinic-4cc38',
+    storageBucket: 'clinic-4cc38.firebasestorage.app',
     iosBundleId: 'com.example.clinic',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyB-kwr4yMG1AAabnylHqAMTmsnhxc6tqts',
-    appId: '1:762047191126:ios:0f4ff91d1c2e45b993c3f7',
-    messagingSenderId: '762047191126',
-    projectId: 'clinic-appointment-403a3',
-    storageBucket: 'clinic-appointment-403a3.firebasestorage.app',
+    apiKey: 'AIzaSyBz9z3Kjmgf6q-54Q16vTsRP_UZ_CKkWko',
+    appId: '1:990752512202:ios:283374c575e23826183c33',
+    messagingSenderId: '990752512202',
+    projectId: 'clinic-4cc38',
+    storageBucket: 'clinic-4cc38.firebasestorage.app',
     iosBundleId: 'com.example.clinic',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDcf4_owo9gur0c_pWCUfKZ8eiYE2kAz0c',
-    appId: '1:762047191126:web:d11a0d85e8e2132293c3f7',
-    messagingSenderId: '762047191126',
-    projectId: 'clinic-appointment-403a3',
-    authDomain: 'clinic-appointment-403a3.firebaseapp.com',
-    storageBucket: 'clinic-appointment-403a3.firebasestorage.app',
-    measurementId: 'G-FZZEQVJQ14',
+    apiKey: 'AIzaSyDS2OYNtIBD5A_AQFXAHRdSieiZFV-Mumg',
+    appId: '1:990752512202:web:75f0e09add7616c1183c33',
+    messagingSenderId: '990752512202',
+    projectId: 'clinic-4cc38',
+    authDomain: 'clinic-4cc38.firebaseapp.com',
+    storageBucket: 'clinic-4cc38.firebasestorage.app',
+    measurementId: 'G-7B476M75K1',
   );
+
 }

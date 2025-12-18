@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:clinic/models/user_model.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'appointment_management_page.dart';
 import 'manage_patient_records_page.dart';
 
 class ManageUsersPage extends StatefulWidget {
-  const ManageUsersPage({Key? key}) : super(key: key);
+  const ManageUsersPage({super.key});
 
   @override
   State<ManageUsersPage> createState() => _ManageUsersPageState();
@@ -21,54 +24,246 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
   final Color _successColor = const Color(0xFF10B981);
   final Color _warningColor = const Color(0xFFF59E0B);
   final Color _errorColor = const Color(0xFFEF4444);
+  late Future<List<UserModel>> _usersFuture;
+  late Future<Map<String, int>> _statsFuture;
 
-  final List<Map<String, dynamic>> _users = [
-    {
-      'name': 'Alice Johnson',
-      'role': 'Administrator',
-      'email': 'alice.johnson@example.com',
-      'status': 'Active',
-      'type': 'Admin',
-      'avatarColor': Color(0xFF2D5AEE),
-    },
-    {
-      'name': 'Dr. Robert Smith',
-      'role': 'Senior Physician',
-      'email': 'robert.smith@clinic.com',
-      'status': 'Active',
-      'type': 'Doctor',
-      'avatarColor': Color(0xFF10B981),
-    },
-    {
-      'name': 'Charlie Brown',
-      'role': 'Patient',
-      'email': 'charlie.brown@example.com',
-      'status': 'Active',
-      'type': 'Patient',
-      'avatarColor': Color(0xFFF59E0B),
-    },
-    {
-      'name': 'Bob Williams',
-      'role': 'Editor',
-      'email': 'bob.williams@example.com',
-      'status': 'Inactive',
-      'type': 'Editor',
-      'avatarColor': Color(0xFF64748B),
-    },
-    {
-      'name': 'Dr. Emily Chen',
-      'role': 'Neurologist',
-      'email': 'emily.chen@clinic.com',
-      'status': 'Active',
-      'type': 'Doctor',
-      'avatarColor': Color(0xFF8B5CF6),
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() => setState(() {}));
+    _usersFuture = _fetchUsers();
+    _statsFuture = _fetchUserStats();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<List<UserModel>> _fetchUsers() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snapshot.docs
+        .map((doc) => UserModel.fromMap({...doc.data(), 'uid': doc.id}))
+        .toList();
+  }
+
+  Future<Map<String, int>> _fetchUserStats() async {
+    final snapshot = await FirebaseFirestore.instance.collection('users').get();
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final weekAgo = today.subtract(const Duration(days: 7));
+
+    int totalUsers = snapshot.docs.length;
+    int activeToday = 0;
+    int newThisWeek = 0;
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+
+      // If status is explicitly Active, count toward active today
+      if ((data['status'] ?? 'Active') == 'Active') {
+        activeToday++;
+      }
+
+      // Check if user was active today (if lastActive field exists)
+      if (data['lastActive'] != null) {
+        final lastActive = (data['lastActive'] as Timestamp).toDate();
+        if (lastActive.isAfter(today)) {
+          activeToday++; // still fine if double-count; adjust to cap below
+        }
+      }
+
+      // Check if user was created this week
+      if (data['createdAt'] != null) {
+        final createdAt = (data['createdAt'] as Timestamp).toDate();
+        if (createdAt.isAfter(weekAgo)) {
+          newThisWeek++;
+        }
+      }
+    }
+
+    // Avoid double counting if both status active and lastActive today
+    if (activeToday > totalUsers) {
+      activeToday = totalUsers;
+    }
+
+    return {
+      'total': totalUsers,
+      'activeToday': activeToday,
+      'newThisWeek': newThisWeek,
+    };
+  }
+
+  Future<void> _refreshData() async {
+    setState(() {
+      _usersFuture = _fetchUsers();
+      _statsFuture = _fetchUserStats();
+    });
+  }
+
+  Future<void> _toggleUserStatus(Map<String, dynamic> user) async {
+    final currentStatus = (user['status'] ?? 'Active') as String;
+    final newStatus = currentStatus == 'Active' ? 'Inactive' : 'Active';
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user['uid'])
+          .update({
+            'status': newStatus,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (!mounted) return;
+      await _refreshData();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newStatus == 'Active' ? 'User activated' : 'User deactivated',
+          ),
+          backgroundColor: newStatus == 'Active'
+              ? _successColor
+              : _warningColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: _errorColor,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editUser(Map<String, dynamic> user) async {
+    final nameController = TextEditingController(text: user['name'] ?? '');
+    String role = user['role'] ?? 'patient';
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Edit User',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: role,
+                items: const [
+                  DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                  DropdownMenuItem(value: 'doctor', child: Text('Doctor')),
+                  DropdownMenuItem(value: 'patient', child: Text('Patient')),
+                ],
+                onChanged: (val) {
+                  if (val != null) role = val;
+                },
+                decoration: const InputDecoration(labelText: 'Role'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user['uid'])
+                            .update({
+                              'fullName': nameController.text.trim(),
+                              'role': role,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+
+                        if (!mounted) return;
+                        Navigator.pop(context);
+                        await _refreshData();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('User updated'),
+                            backgroundColor: _successColor,
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to update user: $e'),
+                            backgroundColor: _errorColor,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _messageUser(Map<String, dynamic> user) async {
+    final email = user['email'] as String?;
+    if (email == null || email.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('No email available for this user'),
+          backgroundColor: _errorColor,
+        ),
+      );
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: email));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Email copied: $email'),
+        backgroundColor: _primaryColor,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _onNavItemTapped(int index) {
@@ -166,33 +361,73 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Stats Overview
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          value: '1,245',
-                          label: 'Total Users',
-                          color: _primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          value: '45',
-                          label: 'Active Today',
-                          color: _successColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          value: '12',
-                          label: 'New This Week',
-                          color: _warningColor,
-                        ),
-                      ),
-                    ],
+                  FutureBuilder<Map<String, int>>(
+                    future: _statsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                value: '—',
+                                label: 'Total Users',
+                                color: _primaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                value: '—',
+                                label: 'Active Today',
+                                color: _successColor,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                value: '—',
+                                label: 'New This Week',
+                                color: _warningColor,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      final stats =
+                          snapshot.data ??
+                          {'total': 0, 'activeToday': 0, 'newThisWeek': 0};
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              value: stats['total'].toString(),
+                              label: 'Total Users',
+                              color: _primaryColor,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              value: stats['activeToday'].toString(),
+                              label: 'Active Today',
+                              color: _successColor,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              value: stats['newThisWeek'].toString(),
+                              label: 'New This Week',
+                              color: _warningColor,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -310,7 +545,7 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Users (${_users.length})',
+                        'Users',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -329,24 +564,78 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+
+                  FutureBuilder<List<UserModel>>(
+                    future: _usersFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
+                      if (snapshot.hasError) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'Error loading users: ${snapshot.error}',
+                            style: TextStyle(color: _errorColor),
+                          ),
+                        );
+                      }
+
+                      final query = _searchController.text.trim().toLowerCase();
+                      final users = (snapshot.data ?? [])
+                          .where(
+                            (u) => query.isEmpty
+                                ? true
+                                : (u.name.toLowerCase().contains(query) ||
+                                      u.email.toLowerCase().contains(query) ||
+                                      u.role.toLowerCase().contains(query)),
+                          )
+                          .toList();
+
+                      if (users.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'No users found.',
+                            style: TextStyle(color: _textSecondary),
+                          ),
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          for (int i = 0; i < users.length; i++)
+                            Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                0,
+                                i == 0 ? 0 : 12,
+                                0,
+                                i == users.length - 1 ? 24 : 0,
+                              ),
+                              child: _buildUserCard({
+                                'uid': users[i].uid,
+                                'name': users[i].fullName.isNotEmpty
+                                    ? users[i].fullName
+                                    : users[i].name,
+                                'role': users[i].role,
+                                'email': users[i].email,
+                                'status': users[i].status,
+                                'type': users[i].role,
+                                'avatarColor': _primaryColor,
+                              }),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
-          ),
-
-          // Users List
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  index == 0 ? 0 : 12,
-                  20,
-                  index == _users.length - 1 ? 80 : 0,
-                ),
-                child: _buildUserCard(_users[index]),
-              );
-            }, childCount: _users.length),
           ),
         ],
       ),
@@ -593,42 +882,48 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _getRoleColor(userType).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              userType,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: _getRoleColor(userType),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getRoleColor(userType).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                userType,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: _getRoleColor(userType),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isActive
-                                  ? _successColor.withOpacity(0.1)
-                                  : _errorColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              user['status'],
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: isActive ? _successColor : _errorColor,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isActive
+                                    ? _successColor.withOpacity(0.1)
+                                    : _errorColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                user['status'],
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isActive ? _successColor : _errorColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
@@ -686,9 +981,12 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _editUser(user),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 8,
+                      ),
                       side: BorderSide(color: _textSecondary.withOpacity(0.3)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -696,30 +994,38 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.edit_outlined,
-                          size: 18,
+                          size: 16,
                           color: _textSecondary,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Edit',
-                          style: TextStyle(
-                            color: _textSecondary,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _toggleUserStatus(user),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 6,
+                      ),
                       side: BorderSide(
                         color: isActive ? _errorColor : _successColor,
                       ),
@@ -729,52 +1035,65 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           isActive
                               ? Icons.person_off_outlined
                               : Icons.person_add_outlined,
-                          size: 18,
+                          size: 16,
                           color: isActive ? _errorColor : _successColor,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isActive ? 'Deactivate' : 'Activate',
-                          style: TextStyle(
-                            color: isActive ? _errorColor : _successColor,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            isActive ? 'Deactivate' : 'Activate',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isActive ? _errorColor : _successColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () => _messageUser(user),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _primaryColor,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 8,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
                         Icon(
                           Icons.message_outlined,
-                          size: 18,
+                          size: 16,
                           color: Colors.white,
                         ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Message',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                        SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Message',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
